@@ -1,37 +1,59 @@
-use crate::memory_utils::read_word_from_buffer;
+use super::memory_utils::read_word_from_buffer;
 use std::fs::read;
 
 pub trait Cartridge {
-    fn read_byte(&mut self, address: u16) -> u8;
-    fn read_word(&mut self, address: u16) -> u16;
+    // PRG
+    fn read_byte(&self, address: u16) -> u8;
+    fn read_word(&self, address: u16) -> u16;
     fn write_byte(&mut self, address: u16, val: u8);
+
+    // CHR
+    fn read_chr(&self) -> &[u8; 0x2000];
 }
 struct CartridgeMapper0 {
-    rom: [u8; 0x8000],
+    prg_rom: [u8; 0x8000],
+    chr_rom: [u8; 0x2000],
     ram: [u8; 0x2000],
     mirrored: bool,
 }
 
 impl CartridgeMapper0 {
-    pub fn new(data: &[u8]) -> Self {
+    pub fn new(data: &[u8], chr_data: &[u8]) -> Self {
         let mut ret = Self {
-            rom: [0; 0x8000],
+            prg_rom: [0; 0x8000],
+            chr_rom: [0; 0x2000],
             ram: [0; 0x2000],
             mirrored: false,
         };
 
         if data.len() == 0x4000 {
             ret.mirrored = true;
-            ret.rom[0..0x4000].clone_from_slice(data);
+            ret.prg_rom[0..0x4000].clone_from_slice(data);
         } else if data.len() == 0x8000 {
             ret.mirrored = false;
-            ret.rom[0..0x8000].clone_from_slice(data);
+            ret.prg_rom[0..0x8000].clone_from_slice(data);
         } else {
             panic!("Invalid rom size {:x}", data.len())
         };
+        ret.chr_rom[0..0x2000].clone_from_slice(chr_data);
         ret
     }
-    fn map_address(&mut self, address: u16) -> (&mut [u8], usize) {
+    fn map_address(&self, address: u16) -> (&[u8], usize) {
+        match address {
+            0x6000..=0x7FFF => (&self.ram, address as usize - 0x6000),
+            0x8000..=0xFFFF => {
+                let offset = address as usize - 0x8000;
+                let offset = if self.mirrored {
+                    offset % 0x4000
+                } else {
+                    offset
+                };
+                (&self.prg_rom, offset)
+            }
+            _ => panic!("Invalid cartrige address {}", address),
+        }
+    }
+    fn map_address_mut(&mut self, address: u16) -> (&mut [u8], usize) {
         match address {
             0x6000..=0x7FFF => (&mut self.ram, address as usize - 0x6000),
             0x8000..=0xFFFF => {
@@ -41,7 +63,7 @@ impl CartridgeMapper0 {
                 } else {
                     offset
                 };
-                (&mut self.rom, offset)
+                (&mut self.prg_rom, offset)
             }
             _ => panic!("Invalid cartrige address {}", address),
         }
@@ -49,13 +71,13 @@ impl CartridgeMapper0 {
 }
 
 impl Cartridge for CartridgeMapper0 {
-    fn read_byte(&mut self, address: u16) -> u8 {
+    fn read_byte(&self, address: u16) -> u8 {
         // println!("reading byte {:x}",address);
         let (buf, offset) = self.map_address(address);
         buf[offset]
     }
 
-    fn read_word(&mut self, address: u16) -> u16 {
+    fn read_word(&self, address: u16) -> u16 {
         // println!("reading word {:x}",address);
         let (buf, offset) = self.map_address(address);
         read_word_from_buffer(buf, offset)
@@ -63,13 +85,17 @@ impl Cartridge for CartridgeMapper0 {
 
     fn write_byte(&mut self, address: u16, val: u8) {
         // println!("writing byte {:x}",address);
-        let (buf, offset) = self.map_address(address);
+        let (buf, offset) = self.map_address_mut(address);
         buf[offset] = val;
+    }
+    
+    fn read_chr(&self) -> &[u8; 0x2000] {
+        &self.chr_rom
     }
 }
 
 mod mmc1 {
-    use crate::memory_utils;
+    use super::super::memory_utils;
 
     enum Mirroring {
         OneScreen,
@@ -215,13 +241,13 @@ mod mmc1 {
     }
 
     impl super::Cartridge for CartridgeMapper1 {
-        fn read_byte(&mut self, address: u16) -> u8 {
+        fn read_byte(&self, address: u16) -> u8 {
             // println!("reading byte {:x}",address);
             let (buf, offset) = self.map_address(address);
             buf[offset]
         }
 
-        fn read_word(&mut self, address: u16) -> u16 {
+        fn read_word(&self, address: u16) -> u16 {
             // println!("reading word {:x}",address);
             let (buf, offset) = self.map_address(address);
             memory_utils::read_word_from_buffer(buf, offset)
@@ -257,6 +283,11 @@ mod mmc1 {
                 _ => panic!("Invalid cartridge address {:x}", address),
             };
             // todo: consecutive write cycles
+        }
+
+
+        fn read_chr(&self) -> &[u8; 0x2000] {
+            todo!()
         }
     }
 }
@@ -302,7 +333,7 @@ pub fn load_rom(path: String) -> Result<Box<dyn Cartridge>, String> {
 
     // Write PRG
     match cartridge_type {
-        0 => Ok(Box::new(CartridgeMapper0::new(prg_data))),
+        0 => Ok(Box::new(CartridgeMapper0::new(prg_data, chr_data))),
         1 => Ok(Box::new(mmc1::CartridgeMapper1::new(prg_data.to_vec(), chr_data.to_vec()))),
         _ => panic!("Unimplemented cartridge type {}", cartridge_type),
     }
