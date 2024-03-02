@@ -94,6 +94,7 @@ struct Hello {
 
     // cached images
     chr_image: Option<image::RgbaImage>,
+    nt_image: Option<image::RgbaImage>,
     frame: image::RgbaImage
 }
 
@@ -112,12 +113,14 @@ impl Application for Hello {
 
     fn new(_flags: ()) -> (Hello, Command<Self::Message>) {
         let mut nes = Nes::default();
-        nes.load_rom(String::from("donkey_kong.nes"));
+        //nes.load_rom(String::from("donkey_kong.nes"));
+        nes.load_rom(String::from("super_mario_brothers.nes"));
         // nes.load_rom(String::from("nes-test-roms/full_palette/full_palette.nes"));
         // nes.load_rom(String::from("nes-test-roms/ppu_vbl_nmi/rom_singles/01-vbl_basics.nes"));
         (Hello {
             nes,
             chr_image: None,
+            nt_image: None,
             frame_rate: 60.0,
             frame: image::RgbaImage::new(256,240),
             controller_state: IcedControllerState::default()
@@ -145,6 +148,8 @@ impl Application for Hello {
             Self::Message::RefreshChrPressed => {
                 let chr_image = self.nes.ppu.borrow().render_chr();
                 self.chr_image = Some(DynamicImage::ImageLuma8(chr_image).into_rgba8());
+                let nt_image = self.nes.ppu.borrow().render_nt();
+                self.nt_image = Some(DynamicImage::ImageRgb8(nt_image).into_rgba8());
                 self.nes.ppu.borrow().print_nametable();
             },
             Self::Message::Tick(instant) => {
@@ -172,6 +177,11 @@ impl Application for Hello {
         // "Hello, world!".into();
         // let chr_image = self.nes.ppu.borrow().render_chr();
         // let chr_image = DynamicImage::ImageLuma8(chr_image).into_rgba8().as_bytes().to_owned();
+        let nt_image = if let Some(image) = self.nt_image.clone() {
+            widget::image::Handle::from_pixels(image.width(),image.height(),image.as_bytes().to_owned())
+        } else {
+            widget::image::Handle::from_pixels(200, 200, [0u8;200*200*4])
+        };
         let chr_image = if let Some(image) = self.chr_image.clone() {
             widget::image::Handle::from_pixels(image.width(),image.height(),image.as_bytes().to_owned())
         } else {
@@ -191,6 +201,10 @@ impl Application for Hello {
                 .max_scale(2.0)
                 .min_scale(2.0)
                 .width(iced::Length::Fill),
+            widget::image::viewer(nt_image)
+                .max_scale(2.0)
+                .min_scale(2.0)
+                .width(iced::Length::Fill),    
             widget::button("Refresh").on_press(Self::Message::RefreshChrPressed)
         ];
         iced::widget::container(content)

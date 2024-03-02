@@ -32,7 +32,7 @@ pub struct MemoryMap {
     //ppu_reg: [u8; PPU_REG_SIZE],
     apu_reg: [u8; APU_REG_SIZE],
     apu_test_reg: [u8; APU_TEST_REG_SIZE],
-    cartridge: Option<Box<dyn Cartridge>>,
+    cartridge: Option<Rc<RefCell<Box<dyn Cartridge>>>>,
 
     // Todo: reorganize
     ppu: Weak<RefCell<Ppu>>,
@@ -96,7 +96,7 @@ impl MemoryMap {
                 }
             }
             Address::ApuTest(offset) => self.apu_test_reg[offset],
-            Address::Cartridge => self.cartridge.as_ref().unwrap().read_byte(address),
+            Address::Cartridge => self.cartridge.as_ref().unwrap().borrow().read_byte(address),
         }
     }
 
@@ -118,7 +118,7 @@ impl MemoryMap {
                 }
             }
             Address::ApuTest(offset) => read_word_from_buffer(&self.apu_test_reg, offset),
-            Address::Cartridge => self.cartridge.as_ref().unwrap().read_word(address),
+            Address::Cartridge => self.cartridge.as_ref().unwrap().borrow().read_word(address),
         }
     }
 
@@ -145,7 +145,7 @@ impl MemoryMap {
                 }
             },
             Address::ApuTest(offset) => self.apu_test_reg[offset] = val,
-            Address::Cartridge => self.cartridge.as_mut().unwrap().write_byte(address, val),
+            Address::Cartridge => self.cartridge.as_mut().unwrap().borrow_mut().write_byte(address, val),
         };
 
         // hidden cycles
@@ -157,7 +157,8 @@ impl MemoryMap {
 
     // todo move this
     pub fn load_rom(&mut self, path: String) -> Result<(), String> {
-        let loaded_cartridge = cartridge::load_rom(path)?;
+        let loaded_cartridge = Rc::new(RefCell::new(cartridge::load_rom(path)?));
+        self.ppu.upgrade().unwrap().borrow_mut().set_cartridge(loaded_cartridge.clone());
         self.cartridge = Some(loaded_cartridge);
         Ok(())
     }
@@ -169,9 +170,9 @@ impl MemoryMap {
         self.io = Rc::downgrade(&inputs)
     }
 
-    pub fn get_chr(&self) -> &[u8; 0x2000] {
-        self.cartridge.as_ref().unwrap().read_chr()
-    }
+    // pub fn get_chr(&self) -> &[u8; 0x2000] {
+    //     self.cartridge.as_ref().unwrap().read_chr()
+    // }
 
     pub fn nmi_requested(&self) -> bool {
         self.ppu.upgrade().unwrap().borrow().nmi_requested()

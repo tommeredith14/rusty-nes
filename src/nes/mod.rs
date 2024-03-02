@@ -24,7 +24,7 @@ impl Nes {
     pub fn new() -> Self {
         let mem = Rc::new(RefCell::new(MemoryMap::new()));
 
-        let ppu = Rc::new(RefCell::new(Ppu::new(mem.clone())));
+        let ppu = Rc::new(RefCell::new(Ppu::new()));
         let cpu = Rc::new(RefCell::new(Cpu::new(mem.clone())));
         let inputs = Rc::new(RefCell::new(InputBus::new()));
 

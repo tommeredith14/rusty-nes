@@ -8,22 +8,36 @@ pub trait Cartridge {
     fn write_byte(&mut self, address: u16, val: u8);
 
     // CHR
-    fn read_chr(&self) -> &[u8; 0x2000];
+    fn get_chr(&self) -> &[u8; 0x2000];
+
+    // Info
+    fn get_nt_mirroring(&self) -> Mirroring;
 }
+
+#[derive(Clone, Copy)]
+pub enum Mirroring {
+    OneScreen,
+    UpperBank,
+    Vertical,
+    Horizontal,
+}
+
 struct CartridgeMapper0 {
     prg_rom: [u8; 0x8000],
     chr_rom: [u8; 0x2000],
     ram: [u8; 0x2000],
     mirrored: bool,
+    nt_mirroring: Mirroring,
 }
 
 impl CartridgeMapper0 {
-    pub fn new(data: &[u8], chr_data: &[u8]) -> Self {
+    pub fn new(data: &[u8], chr_data: &[u8], nt_mirroring: Mirroring) -> Self {
         let mut ret = Self {
             prg_rom: [0; 0x8000],
             chr_rom: [0; 0x2000],
             ram: [0; 0x2000],
-            mirrored: false,
+            nt_mirroring,
+            mirrored: false
         };
 
         if data.len() == 0x4000 {
@@ -89,20 +103,25 @@ impl Cartridge for CartridgeMapper0 {
         buf[offset] = val;
     }
     
-    fn read_chr(&self) -> &[u8; 0x2000] {
+    fn get_chr(&self) -> &[u8; 0x2000] {
         &self.chr_rom
+    }
+
+    fn get_nt_mirroring(&self) -> Mirroring {
+        self.nt_mirroring
     }
 }
 
 mod mmc1 {
     use super::super::memory_utils;
+    use super::Mirroring;
 
-    enum Mirroring {
-        OneScreen,
-        UpperBank,
-        Vertical,
-        Horizontal,
-    }
+    // enum Mirroring {
+    //     OneScreen,
+    //     UpperBank,
+    //     Vertical,
+    //     Horizontal,
+    // }
     enum PRGSwap {
         Swap8000,
         SwapC000,
@@ -174,7 +193,7 @@ mod mmc1 {
         pgr_bank_register: PRGReg,
     }
     impl CartridgeMapper1 {
-        pub fn new(prg: Vec<u8>, chr: Vec<u8>) -> Self {
+        pub fn new(prg: Vec<u8>, chr: Vec<u8>, nt_mirroring: Mirroring) -> Self {
             let banks = prg.len() / 0x4000;
             let mut prg_rom: Vec<[u8; 0x4000]> = Vec::new();
             for bank in 0..banks {
@@ -190,7 +209,7 @@ mod mmc1 {
                 chr_rom: Vec::new(), // todo
                 shift_register: 0x10,
                 control_register: ConfigReg {
-                    mirroring: Mirroring::Vertical,
+                    mirroring: nt_mirroring,
                     prg_swapping: PRGSize::Size16k(PRGSwap::Swap8000),
                     chr_swapping: CHRSize::Size8k, // TODO: whats the default??
                 },
@@ -286,8 +305,12 @@ mod mmc1 {
         }
 
 
-        fn read_chr(&self) -> &[u8; 0x2000] {
+        fn get_chr(&self) -> &[u8; 0x2000] {
             todo!()
+        }
+
+        fn get_nt_mirroring(&self) -> Mirroring {
+            self.control_register.mirroring
         }
     }
 }
@@ -320,7 +343,11 @@ pub fn load_rom(path: String) -> Result<Box<dyn Cartridge>, String> {
     );
 
     let cartridge_type = ((flags6 & 0xF0) >> 4) | (flags7 & 0xF0);
-
+    let nt_mirroring = match (flags6 & 0x01) {
+        0 => Mirroring::Horizontal,
+        1 => Mirroring::Vertical,
+        _ => panic!()
+    };
     // TODO: interpret flags, v2
     // TODO: trainer
 
@@ -333,8 +360,8 @@ pub fn load_rom(path: String) -> Result<Box<dyn Cartridge>, String> {
 
     // Write PRG
     match cartridge_type {
-        0 => Ok(Box::new(CartridgeMapper0::new(prg_data, chr_data))),
-        1 => Ok(Box::new(mmc1::CartridgeMapper1::new(prg_data.to_vec(), chr_data.to_vec()))),
+        0 => Ok(Box::new(CartridgeMapper0::new(prg_data, chr_data, nt_mirroring))),
+        1 => Ok(Box::new(mmc1::CartridgeMapper1::new(prg_data.to_vec(), chr_data.to_vec(),nt_mirroring))),
         _ => panic!("Unimplemented cartridge type {}", cartridge_type),
     }
     // self.write_bytes(0x8000, prg_data);
