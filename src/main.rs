@@ -52,7 +52,7 @@ impl MyEguiApp {
 impl Default for MyEguiApp {
     fn default() -> Self {
         let mut nes = Nes::default();
-        nes.load_rom(String::from("donkey_kong.nes"));
+        //nes.load_rom(String::from("donkey_kong.nes"));
         // let chr_image = nes.ppu.borrow().render_chr();
         // let chr_image = DynamicImage::ImageLuma8(chr_image).into_rgba8();
         // let chr_data = egui::ColorImage::from_rgba_unmultiplied(
@@ -114,7 +114,7 @@ impl Application for Hello {
     fn new(_flags: ()) -> (Hello, Command<Self::Message>) {
         let mut nes = Nes::default();
         //nes.load_rom(String::from("donkey_kong.nes"));
-        nes.load_rom(String::from("super_mario_brothers.nes"));
+         nes.load_rom(String::from("super_mario_brothers.nes"));
         // nes.load_rom(String::from("nes-test-roms/full_palette/full_palette.nes"));
         // nes.load_rom(String::from("nes-test-roms/ppu_vbl_nmi/rom_singles/01-vbl_basics.nes"));
         (Hello {

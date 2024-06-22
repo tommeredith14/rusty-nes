@@ -2,6 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use super::{cartridge::Cartridge, cartridge::Mirroring, memory::MemoryMap};
 
+use eframe::glow::MAX_FRAGMENT_ATOMIC_COUNTERS;
 use iced::alignment::Horizontal;
 use image::{self, RgbImage};
 // use show_image;
@@ -38,8 +39,8 @@ enum SpriteSize {
     Sprite8x16
 }
 struct PpuCtrl {
-    nt_base_x: bool,
-    nt_base_y: bool,
+    //nt_base_x: bool,
+    //nt_base_y: bool,
     vram_inc: VramInc,
     sprite_pt_addr: u16,
     bg_pt_addr: u16,
@@ -55,8 +56,8 @@ impl From<u8> for PpuCtrl {
         };
               
         Self { 
-            nt_base_x: value & 0x01 != 0,
-            nt_base_y: value & 0x02 != 0,
+            //nt_base_x: value & 0x01 != 0,
+            //nt_base_y: value & 0x02 != 0,
             vram_inc: match (value & 0x04) != 0 {
                 false => VramInc::Inc1,
                 true  => VramInc::Inc32
@@ -129,91 +130,222 @@ impl From<&PpuStatus> for u8 {
 }
 
 
-struct PpuScroll {
-    scroll_x: u8,
-    scroll_y: u8,
-    next_write_x: bool
-}
-impl Default for PpuScroll {
-    fn default() -> Self {
-        Self { scroll_x: 0, scroll_y: 0, next_write_x: true }
-    }
-}
-impl PpuScroll {
-    pub fn unlatch(&mut self) {
-        // self.scroll_x = 0;
-        // self.scroll_y = 0;
-        self.next_write_x = true;
-    }
-    pub fn get_x(&self) -> u8 {
-        self.scroll_x
-    }
-    pub fn get_y(&self) -> u8 {
-        self.scroll_y
-    }
-    pub fn write(&mut self, val: u8) {
-        if self.next_write_x {
-            self.scroll_x = val;
-        } else {
-            self.scroll_y = val;
-        }
-        self.next_write_x = !self.next_write_x;
-    }
-}
+// struct PpuScroll {
+//     scroll_x: u8,
+//     scroll_y: u8,
+//     next_write_x: bool
+// }
+// impl Default for PpuScroll {
+//     fn default() -> Self {
+//         Self { scroll_x: 0, scroll_y: 0, next_write_x: true }
+//     }
+// }
+// impl PpuScroll {
+//     pub fn unlatch(&mut self) {
+//         // self.scroll_x = 0;
+//         // self.scroll_y = 0;
+//         self.next_write_x = true;
+//     }
+//     pub fn get_x(&self) -> u8 {
+//         self.scroll_x
+//     }
+//     pub fn get_y(&self) -> u8 {
+//         self.scroll_y
+//     }
+//     pub fn write(&mut self, val: u8) {
+//         if self.next_write_x {
+//             self.scroll_x = val;
+//         } else {
+//             self.scroll_y = val;
+//         }
+//         self.next_write_x = !self.next_write_x;
+//     }
+// }
 
-struct PpuAddr {
-    hi: u8,
-    lo: u8,
-    next_write_hi: bool
+// struct PpuAddr {
+//     hi: u8,
+//     lo: u8,
+//     next_write_hi: bool
+// }
+// impl Default for PpuAddr {
+//     fn default() -> Self {
+//         Self { hi: 0, lo: 0, next_write_hi: true }
+//     }
+// }
+// impl PpuAddr {
+//     pub fn unlatch(&mut self) {
+//         // self.lo = 0;
+//         // self.lo = 0;
+//         self.next_write_hi = true;
+//     }
+//     pub fn get(&self) -> u16 {
+//         let hi = self.hi as u16;
+//         let lo = self.lo as u16;
+//         (hi << 8) | lo
+//     }
+//     pub fn write(&mut self, val: u8) {
+//         if self.next_write_hi {
+//             self.hi = val;
+//         } else {
+//             self.lo = val;
+//         }
+//         self.next_write_hi = !self.next_write_hi;
+//         // match self.hi {
+//         //     None => self.hi = Some(val),
+//         //     Some(_) => match self.lo {
+//         //         None => self.lo = Some(val),
+//         //         Some(_) => {} // TODO: Ignore further writes??
+//         //     }
+//         // }
+//     }
+//     pub fn inc(&mut self, inc: VramInc) {
+//         let addr = self.get();
+//         let addr = match inc {
+//             VramInc::Inc1 => addr.wrapping_add(1), // TODO: wrap to 0x4000?
+//             VramInc::Inc32 => addr.wrapping_add(32)
+//         };
+//         self.hi = ((addr & 0xFF00) >> 8) as u8;
+//         self.lo = (addr & 0x00FF) as u8;
+//     }
+// }
+
+#[derive(Default,Clone, Copy)]
+struct VRamAddr {
+    coarse_x: u8,
+    coarse_y: u8,
+    nt_x: bool,
+    nt_y: bool,
+    fine_y: u8
 }
-impl Default for PpuAddr {
-    fn default() -> Self {
-        Self { hi: 0, lo: 0, next_write_hi: true }
+impl From<&VRamAddr> for u16 {
+    fn from(v: &VRamAddr) -> Self {
+        ((v.fine_y as u16) << 12) |
+        (if v.nt_y {0x800} else {0}) |
+        (if v.nt_x {0x400} else {0}) |
+        ((v.coarse_y as u16) << 5) |
+        (v.coarse_x as u16)
     }
 }
-impl PpuAddr {
-    pub fn unlatch(&mut self) {
-        // self.lo = 0;
-        // self.lo = 0;
-        self.next_write_hi = true;
-    }
-    pub fn get(&self) -> u16 {
-        let hi = self.hi as u16;
-        let lo = self.lo as u16;
-        (hi << 8) | lo
-    }
-    pub fn write(&mut self, val: u8) {
-        if self.next_write_hi {
-            self.hi = val;
-        } else {
-            self.lo = val;
+impl From<u16> for VRamAddr {
+    fn from(v: u16) -> Self {
+        Self {
+            coarse_x: (v & 0b1_1111) as u8,
+            coarse_y: ((v & 0b11_1110_0000) >> 5) as u8,
+            nt_x: (v & 0x400) != 0,
+            nt_y: (v & 0x800) != 0,
+            fine_y: ((v & 0x3800) >> 12) as u8
         }
-        self.next_write_hi = !self.next_write_hi;
-        // match self.hi {
-        //     None => self.hi = Some(val),
-        //     Some(_) => match self.lo {
-        //         None => self.lo = Some(val),
-        //         Some(_) => {} // TODO: Ignore further writes??
-        //     }
-        // }
-    }
-    pub fn inc(&mut self, inc: VramInc) {
-        let addr = self.get();
-        let addr = match inc {
-            VramInc::Inc1 => addr.wrapping_add(1), // TODO: wrap to 0x4000?
-            VramInc::Inc32 => addr.wrapping_add(32)
-        };
-        self.hi = ((addr & 0xFF00) >> 8) as u8;
-        self.lo = (addr & 0x00FF) as u8;
     }
 }
 
 #[derive(Default)]
 struct InternalRegisters {
-    v: u16,
-    t: u16,
+    v: VRamAddr,
+    t: VRamAddr,
     x: u8,
     w: bool
+}
+
+impl InternalRegisters {
+    fn write_nt(&mut self, d: u8) {
+        self.t.nt_x = d & 0x01 != 0;
+        self.t.nt_y = d & 0x02 != 0;
+    }
+
+    fn unlatch(&mut self) {
+        self.w = false
+    }
+
+    fn write_scroll(&mut self, d: u8) {
+        if !self.w {
+            // first write (x)
+            self.t.coarse_x = d >> 3;
+            self.x = d & 0b111;
+            self.w = true;
+        } else {
+            // second write (y)
+            self.t.coarse_y = d >> 3;
+            self.t.fine_y = d & 0b111;
+            self.w = false;
+        }
+    }
+
+    fn write_addr(&mut self, d: u8) {
+        if !self.w {
+            // first write (hi)
+            let d = d & 0x3F;
+            self.t.coarse_y = (self.t.coarse_y & 0b111) | ((d & 0b11) << 3);
+            self.t.nt_x = d & 0b00_0100 != 0;
+            self.t.nt_y = d & 0b00_1000 != 0;
+            self.t.fine_y = (d & 0b111_0000) >> 4;
+            self.w = true;
+        } else {
+            // second write (lo)
+            self.t.coarse_x = d & 0b01_1111;
+            self.t.coarse_y = (self.t.coarse_y & 0b1_1000) | ((d & 0b1110_0000) >> 5);
+            self.w = false;
+            self.v = self.t;
+        }
+    }
+
+    fn inc_x(&mut self) {
+        self.v.coarse_x += 1;
+        if self.v.coarse_x >= 32 {
+            self.v.coarse_x = 0;
+            self.v.nt_x = !self.v.nt_x;
+        }
+    }
+    fn inc_y(&mut self) {
+        self.v.fine_y += 1;
+        if self.v.fine_y >= 8 {
+            self.v.fine_y = 0;
+            let mut y = self.v.coarse_y;
+            y = match y {
+                29 => {
+                    self.v.nt_y = !self.v.nt_y;
+                    0
+                },
+                31 => {
+                    0
+                },
+                _ => {
+                    y + 1
+                },
+            };
+            self.v.coarse_y = y;
+        }
+    }
+
+    fn reset_x(&mut self) {
+        self.v.coarse_x = self.t.coarse_x;
+        self.v.nt_x = self.t.nt_x;
+    }
+    fn reset_y(&mut self) {
+        self.v.coarse_y = self.t.coarse_y;
+        self.v.fine_y = self.t.fine_y;
+        self.v.nt_y = self.t.nt_y;
+    }
+
+    fn inc_addr(&mut self, inc: VramInc) {
+        // TODO: races during rendering
+        let mut v = u16::from(&self.v);
+        v += match inc {
+            VramInc::Inc1 => 1,
+            VramInc::Inc32 => 32
+        };
+        self.v = v.into()
+    }
+
+    fn get_addr(&self) -> u16 {
+        u16::from(&self.v) & 0x3FFF
+    }
+    fn get_tile_addr(&self) -> u16 {
+        0x2000u16 | (u16::from(&self.v) & 0xFFFu16)
+    }
+    fn get_attr_addr(&self) -> u16 {
+        let v = u16::from(&self.v);
+        0x23C0 | (v & 0x0C00) | ((v >> 4) & 0x38) | ((v >> 2) & 0x07)
+    }
 }
 
 #[derive(Default)]
@@ -222,9 +354,9 @@ struct PpuRegisters {
     ppumask: PpuMask,
     ppustatus: PpuStatus,
     oamaddr: u8,
-    ppuscroll: PpuScroll,
-    ppuaddr: PpuAddr,
-    //internal: InternalRegisters,
+    //ppuscroll: PpuScroll,
+    //ppuaddr: PpuAddr,
+    internal: InternalRegisters,
     // oamdma: u8
 }
 
@@ -244,22 +376,63 @@ fn map_ppu_addr(addr: u16) -> PpuAddress {
 }
 
 #[derive(Default,Clone, Copy)]
-struct PpuCache {
+struct Pipeline {
     nt: u8,
-    at: u8,
-    pt_lo: u8,
-    pt_hi: u8
+    at_hi: u8,
+    at_lo: u8,
+    pt_lo: u16,
+    pt_hi: u16,
+    at_latch_hi: u8,
+    at_latch_lo: u8
 }
+impl Pipeline {
+    fn transfer(&mut self, pt_hi: u8, pt_lo: u8, at: u8) {
+        self.pt_hi = ((pt_hi as u16)) | (self.pt_hi & 0xFF00);
+        self.pt_lo = ((pt_lo as u16)) | (self.pt_lo & 0xFF00);
+        self.at_latch_hi = (at & 0x02) >>1;
+        self.at_latch_lo = at & 0x01;
+        // println!("{:02x}<-{},{:02x}<-{}",self.at_hi, self.at_latch_hi, self.at_lo, self.at_latch_lo);
+    }
+
+    fn read(&self, fine_x: u8) -> (u8, u8) {
+        let mut pt = 0;
+        let mut at = 0;
+        let shift = 7-fine_x;
+        let mask = 1 << shift;
+
+        pt |= (self.pt_hi & ((mask as u16) << 8));
+        at |= (self.at_hi & (mask));
+
+        pt >>= ((shift + 8)- 1);
+        if shift == 0 {
+            at <<= 1;
+        } else {
+            at >>= (shift - 1);
+        }
+
+        pt |= (self.pt_lo & ((mask as u16)<<8)) >> (shift+8);        
+        at |= (self.at_lo & (mask)) >> (shift);
+        (pt as u8, at)
+    }
+
+    fn shift(&mut self) {
+        self.at_hi = (self.at_hi << 1) | self.at_latch_hi;
+        self.at_lo = (self.at_lo << 1) | self.at_latch_lo;
+
+        self.pt_hi <<= 1;
+        self.pt_lo <<= 1;
+    }
+}
+
 
 #[derive(Default)]
 struct PpuState {
     frame: u32,
     scanline: usize,
     cycle: usize,
-    shift1: PpuCache,
-    shift2: PpuCache,
-    latch: PpuCache,
+    pipeline: Pipeline,
     num_2oam: usize,
+    sprite0_det: bool,
     chr_cache: (u8, u8),
     attr_cache: u8
 }
@@ -323,8 +496,7 @@ impl Ppu {
                 // TODO: unlatching, clearing
                 let ret : u8 = (&self.reg.ppustatus).into();
                 self.reg.ppustatus.vblank = false;
-                self.reg.ppuscroll.unlatch();
-                self.reg.ppuaddr.unlatch();
+                self.reg.internal.unlatch();
                 ret
             },
             0x03 => panic!(),
@@ -333,9 +505,11 @@ impl Ppu {
             0x06 => panic!(),
             0x07 => {
                 let ret = self.read_buf;
-                self.read_buf = self.read_ppu_byte(self.reg.ppuaddr.get());
-                println!("read {:2x} from {:4x} (buf {:x})",self.read_buf,self.reg.ppuaddr.get(),ret);
-                self.reg.ppuaddr.inc(self.reg.ppuctrl.vram_inc);
+                let addr = self.reg.internal.get_addr();
+                self.read_buf = self.read_ppu_byte(addr);
+                // println!("read {:2x} from {:4x} (buf {:x})",self.read_buf,addr,ret);
+                self.reg.internal.inc_addr(self.reg.ppuctrl.vram_inc);
+                // println!("now {:4x}",self.reg.internal.get_addr());
                 ret
             }, // PPUDATA
 
@@ -346,9 +520,12 @@ impl Ppu {
     }
 
     pub fn write_reg(&mut self, addr: u16, val: u8) {
-        println!("W PPU REG 0x20{:2x} => {:2x}", addr, val);
+        // println!("W PPU REG 0x20{:2x} => {:2x}", addr, val);
         match addr {
-            0x00 => self.reg.ppuctrl = val.into(),
+            0x00 => {
+                self.reg.internal.write_nt(val);
+                self.reg.ppuctrl = val.into()
+            },
             0x01 => self.reg.ppumask = val.into(),
             0x02 => {} // Can't write to status
             0x03 => self.reg.oamaddr = val,
@@ -356,12 +533,14 @@ impl Ppu {
                 self.oam[self.reg.oamaddr as usize] = val;
                 self.reg.oamaddr = self.reg.oamaddr.wrapping_add(1)
             },
-            0x05 => self.reg.ppuscroll.write(val),
-            0x06 => self.reg.ppuaddr.write(val),
+            0x05 => self.reg.internal.write_scroll(val),
+            0x06 => self.reg.internal.write_addr(val),
             0x07 => { // PPUDATA
-                println!("W {:2x} to ppu {:4x}",val, self.reg.ppuaddr.get());
-                self.write_ppu_byte(self.reg.ppuaddr.get(), val);
-                self.reg.ppuaddr.inc(self.reg.ppuctrl.vram_inc);
+                let addr = self.reg.internal.get_addr();
+                // println!("W {:2x} to ppu {:4x}",val, addr);
+                self.write_ppu_byte(addr, val);
+                self.reg.internal.inc_addr(self.reg.ppuctrl.vram_inc);
+                // println!("now {:4x}",self.reg.internal.get_addr());
             },
 
             _ => panic!("Invalid ppu write to {:x}",addr)
@@ -400,7 +579,7 @@ impl Ppu {
         }
     }
 
-    pub fn read_ppu_byte(&mut self, addr: u16) -> u8 {
+    pub fn read_ppu_byte(&self, addr: u16) -> u8 {
         let parsed_addr = map_ppu_addr(addr);
         match parsed_addr {
             PpuAddress::Chr(offset) => self.cartridge.as_ref().unwrap().borrow().get_chr()[offset as usize],
@@ -418,6 +597,7 @@ impl Ppu {
                     }
                     _ => panic!()
                 };
+                let offset = offset % 0x400;
                 nt[offset as usize]
             },
             PpuAddress::Pallette(offset) => {
@@ -438,8 +618,11 @@ impl Ppu {
         }
     }
 
+    fn fetch_nametable(&self) -> u8 {//, x: usize, y: usize) -> u8 {
+        let addr = self.reg.internal.get_tile_addr();
+        self.read_ppu_byte(addr)
+    }
     fn read_nametable(&self, x: usize, y: usize) -> u8 {
-
         let tile_x = x/8;
         let tile_y = y/8;
         
@@ -468,8 +651,32 @@ impl Ppu {
 
         nt[tile_id] // TODO: base NT address
     }
+    fn fetch_attribute_table(&self) -> u8 {
+        let addr = self.reg.internal.get_attr_addr();
+        // TODO fine x
+        let attr_byte = self.read_ppu_byte(addr);
 
+        let sub_x = (self.reg.internal.v.coarse_x & 0x02) >> 1;
+        let sub_y = (self.reg.internal.v.coarse_y & 0x02) >> 1;
+        let shift = match sub_y {
+            0 => match sub_x {
+                0 => 0, // top left
+                1 => 2, // top right
+                _ => panic!(),
+            },
+            1 => match sub_x {
+                0 => 4, // bottom left
+                1 => 6, // bottom right
+                _ => panic!(),
+            }
+            _ => panic!()
+        };
+        //println!("{:04x}: {:02x} -> {}",addr,attr_byte,(attr_byte & (0x3 << shift)) >> shift);
+        (attr_byte & (0x3 << shift)) >> shift
+
+    }
     fn read_attribute_table(&self, x: usize, y: usize) -> u8 {
+
         // let x = (x + self.reg.ppuscroll.get_x() as usize + if self.reg.ppuctrl.nt_base_x {256} else {0})%512;
         // let y = (y + self.reg.ppuscroll.get_y() as usize + if self.reg.ppuctrl.nt_base_x {240} else {0})%480;
         let block_x = x/16;
@@ -542,12 +749,16 @@ impl Ppu {
         //     // TODO: sprite overflow
         // }
 
+        self.state.sprite0_det = false;
         for s_id in 0..64 {
             let addr = s_id * 4;
             let sprite_y = self.oam[addr] as usize + 1;
             // if (sprite_y..sprite_y+8).contains(&y) { // TODO: 8x16 sprites
             if sprite_y <= y && y < sprite_y+8 {
                 self.secondary_oam[self.state.num_2oam].copy_from_slice(&self.oam[addr..addr+4]);
+                if s_id == 0 {
+                    self.state.sprite0_det = true;
+                }
                 self.state.num_2oam += 1;
                 if self.state.num_2oam >= 8 {
                     break;
@@ -557,7 +768,7 @@ impl Ppu {
         // TODO: proper prefetching
     }
 
-    fn lookup_chr_bg(&self, chr_id: u8, row: u8, col: u8) -> (u8, u8) {
+    fn lookup_chr_bg(&self, chr_id: u8, row: u8) -> (u8, u8) {
         let chr_addr = {
             let mut chr_addr = self.reg.ppuctrl.bg_pt_addr as usize; // Which pattern table
             chr_addr += (chr_id as usize) << 4; // Which sprite
@@ -565,12 +776,9 @@ impl Ppu {
             chr_addr
         };
 
-        let bit_num = 7 - (col%8);
         let cart_binding = self.cartridge.as_ref().unwrap().borrow();
         let chr = cart_binding.get_chr();
-        // let chr_lo = (chr[chr_addr] & (1 << bit_num)) >> bit_num;
-        // let chr_hi = (chr[chr_addr + 0x08]& (1 << bit_num)) >> bit_num;
-        // chr_hi << 1 | chr_lo
+
         let chr_lo = chr[chr_addr];
         let chr_hi = chr[chr_addr + 0x08];
         (chr_hi, chr_lo)
@@ -602,7 +810,31 @@ impl Ppu {
 
         let cycle = self.state.cycle;
 
+        let enable = self.reg.ppumask.show_bg || self.reg.ppumask.show_sprites;
+        if enable {
+            if cycle == 257 {
+                self.reg.internal.inc_y();
+            }
+            if cycle == 258 {
+                self.reg.internal.reset_x();
+            }
+            if self.state.scanline == 261 && (281..=305).contains(&cycle) {
+                self.reg.internal.reset_y();
+            }
+            if ((1..=257).contains(&cycle) && cycle % 8 == 1) || (cycle == 329) {//|| cycle == 329 {
+                let chr_id = self.fetch_nametable();
+                let (pt_hi, pt_lo) = self.lookup_chr_bg(chr_id, self.reg.internal.v.fine_y);
+                let at = self.fetch_attribute_table();
+                // println!("{},{}: got at {:02x}",self.state.scanline, cycle, at);
+                self.state.pipeline.transfer(pt_hi, pt_lo, at);
+                self.reg.internal.inc_x();
+            }
+        }
 
+        
+        
+        
+        
         if cycle != 0 {
             let x = cycle - 1;
             let y = self.state.scanline;
@@ -610,33 +842,39 @@ impl Ppu {
             if x < 256 && y <240 {
                 // println!("Rendering {},{}",x,y);
 
-                let (bg_val, bg_palette) = {
-                    let bg_x = (
-                        x + self.reg.ppuscroll.get_x() as usize + 
-                        if self.reg.ppuctrl.nt_base_x {256} else {0})%512;
-                    let bg_y = (y + 
-                        self.reg.ppuscroll.get_y() as usize + 
-                        if self.reg.ppuctrl.nt_base_x {240} else {0})%480;
-                    if x == 0 || bg_x % 8 == 0 {
-                        let chr_id = self.read_nametable(bg_x, bg_y);
-                        self.state.chr_cache = self.lookup_chr_bg(chr_id, bg_y as u8 % 8, bg_x as u8 % 8);
-                        self.state.attr_cache = self.read_attribute_table(bg_x, bg_y);
-                    }
+                let (bg_val, bg_palette) = self.state.pipeline.read(self.reg.internal.x);
+                if x % 8 == 0 {
+                    // println!("read:{},{}",bg_val,bg_palette);
+                }
+                // {
+                //     // let bg_x = (
+                //     //     x + self.reg.ppuscroll.get_x() as usize + 
+                //     //     if self.reg.ppuctrl.nt_base_x {256} else {0})%512;
+                //     // let bg_y = (y + 
+                //     //     self.reg.ppuscroll.get_y() as usize + 
+                //     //     if self.reg.ppuctrl.nt_base_x {240} else {0})%480;
+                //     if x == 0 || x % 8 == 0 {
+                //         let chr_id = self.read_nametable(x, y);
+                //         self.state.chr_cache = self.lookup_chr_bg(chr_id, y as u8 % 8, x as u8 % 8);
+                //         self.state.attr_cache = self.read_attribute_table(x, y);
+                //         println!("[{},{}]: {}, {}/{}, {}",x,y,chr_id,self.state.chr_cache.0, self.state.chr_cache.1, self.state.attr_cache);
+                //     }
 
-                    // let chr_id = self.read_nametable(x, y); // TODO: scrolling/base address
-                    // let palette_id = self.read_attribute_table(x, y);
+                //     // let chr_id = self.read_nametable(x, y); // TODO: scrolling/base address
+                //     // let palette_id = self.read_attribute_table(x, y);
 
-                    // let chr_val = self.lookup_chr_bg(chr_id, y as u8 % 8, x as u8 % 8);
-                    let (chr_hi, chr_lo) = self.state.chr_cache;
-                    let bit_num = 7 - (bg_x % 8);
-                    let chr_lo = (chr_lo & (1 << bit_num)) >> bit_num;
-                    let chr_hi = (chr_hi & (1 << bit_num)) >> bit_num;
-                    let chr_val = chr_hi << 1 | chr_lo;
+                //     // let chr_val = self.lookup_chr_bg(chr_id, y as u8 % 8, x as u8 % 8);
+                //     let (chr_hi, chr_lo) = self.state.chr_cache;
+                //     let bit_num = 7 - (x % 8);
+                //     let chr_lo = (chr_lo & (1 << bit_num)) >> bit_num;
+                //     let chr_hi = (chr_hi & (1 << bit_num)) >> bit_num;
+                //     let chr_val = chr_hi << 1 | chr_lo;
 
-                    let palette_id = self.state.attr_cache;
+                //     let palette_id = self.state.attr_cache;
+                //     println!("{},  {}",chr_val, palette_id);
 
-                    (chr_val, palette_id)
-                };
+                //     (chr_val, palette_id)
+                // };
 
                 let sprite_data = {
                     let mut sprite_data = None;
@@ -675,8 +913,8 @@ impl Ppu {
                 let sprite_enable = self.reg.ppumask.show_sprites && !(x < 8 && !self.reg.ppumask.show_left_sprite);
 
                 let mut color_id = if !self.reg.ppumask.show_bg && !self.reg.ppumask.show_sprites {
-                    if (0x3f00..=0x3fff).contains(&self.reg.ppuaddr.get()) {
-                        self.pallette[(self.reg.ppuaddr.get() as usize - 0x3f00) % 0x20]
+                    if (0x3f00..=0x3fff).contains(&self.reg.internal.get_addr()) {
+                        self.pallette[(self.reg.internal.get_addr() as usize - 0x3f00) % 0x20]
                     } else {
                         self.pallette[0] // TODO: correct?
                     }
@@ -684,10 +922,10 @@ impl Ppu {
                     // Consider sprite
                     let (sprite_id, sprite_val, sprite_attr) = sprite_data;
                     if bg_enable && sprite_enable {
-                        let sprite0_hit = sprite_id == 0 && sprite_val != 0 && bg_val != 0;
+                        let sprite0_hit = self.state.sprite0_det && sprite_id == 0 && sprite_val != 0 && bg_val != 0;
                         if sprite0_hit {
                             self.reg.ppustatus.sprite_0_hit = true;
-                            println!("Sprite0 hit!");
+                            println!("Sprite0 hit! {} @ {},{}",sprite_id,x,y);
 
                         }
                     }
@@ -797,7 +1035,9 @@ impl Ppu {
             //     self.fb.put_pixel(cycle as u32 -1, self.state.scanline as u32, image::Rgb([color.0, color.1, color.2]));
             // }
         }
-
+        if cycle < 336 {
+            self.state.pipeline.shift();
+        }
     }
 
     pub fn advance_cycles(&mut self, cycles: u64) -> bool {
@@ -881,9 +1121,9 @@ impl Ppu {
         };
         let mut nt_img = image::RgbImage::new(size.0 as u32,size.1 as u32);
 
-        println!("SCROLL: {},{} ,   offset : {},{}",self.reg.ppuscroll.get_x(),self.reg.ppuscroll.get_y(), self.reg.ppuctrl.nt_base_x, self.reg.ppuctrl.nt_base_y);
-        let x_min = (self.reg.ppuscroll.get_x() as usize + if self.reg.ppuctrl.nt_base_x {256} else {0})%size.0;
-        let y_min = (self.reg.ppuscroll.get_y() as usize + if self.reg.ppuctrl.nt_base_y {240} else {0})%size.1;
+        // println!("SCROLL: {},{} ,   offset : {},{}",self.reg.ppuscroll.get_x(),self.reg.ppuscroll.get_y(), self.reg.ppuctrl.nt_base_x, self.reg.ppuctrl.nt_base_y);
+        // let x_min = (self.reg.ppuscroll.get_x() as usize + if self.reg.ppuctrl.nt_base_x {256} else {0})%size.0;
+        // let y_min = (self.reg.ppuscroll.get_y() as usize + if self.reg.ppuctrl.nt_base_y {240} else {0})%size.1;
 
 
         for y in 0..size.1 {
@@ -896,7 +1136,7 @@ impl Ppu {
                     // let palette_id = self.read_attribute_table(x, y);
 
                     // let chr_val = self.lookup_chr_bg(chr_id, y as u8 % 8, x as u8 % 8);
-                    let (chr_hi, chr_lo) = self.lookup_chr_bg(chr_id, y as u8 % 8, x as u8 % 8);
+                    let (chr_hi, chr_lo) = self.lookup_chr_bg(chr_id, y as u8 % 8);
                     let bit_num = 7 - (x % 8);
                     let chr_lo = (chr_lo & (1 << bit_num)) >> bit_num;
                     let chr_hi = (chr_hi & (1 << bit_num)) >> bit_num;
@@ -911,13 +1151,14 @@ impl Ppu {
                 } else {
                     self.pallette[4*bg_palette as usize + bg_val as usize]
                 };
-                let color = if x == x_min || y == y_min {
-                    (255,0,0)
-                } else if x == x_min + 255 || y == y_min + 239 {
-                    (200,200,0)
-                } else {
+                let color = if x % 16 == 0|| y % 16 == 0 {//if x == x_min || y == y_min {
+                     (255,0,0)
+                // } else if x == x_min + 255 || y == y_min + 239 {
+                //     (200,200,0)
+                 } else {
                     SYSTEM_PALETTE[(color_id & 0x3f) as usize]
-                };
+                 }
+                ;
                 nt_img.put_pixel(x as u32, y as u32, image::Rgb([color.0, color.1, color.2]));
             }
         }
