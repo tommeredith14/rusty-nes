@@ -9,6 +9,7 @@ pub trait Cartridge {
 
     // CHR
     fn get_chr(&self) -> &[u8; 0x2000];
+    fn write_byte_chr(&mut self, address: u16, val: u8);
 
     // Info
     fn get_nt_mirroring(&self) -> Mirroring;
@@ -110,6 +111,10 @@ impl Cartridge for CartridgeMapper0 {
     fn get_nt_mirroring(&self) -> Mirroring {
         self.nt_mirroring
     }
+    
+    fn write_byte_chr(&mut self, address: u16, val: u8) {
+        panic!("Can't write to this mapper's CHR!");
+    }
 }
 
 mod mmc1 {
@@ -150,8 +155,10 @@ mod mmc1 {
                     _ => panic!(),
                 },
                 prg_swapping: match (reg & 0x08) >> 3 {
-                    0 => PRGSize::Size32k,
-                    1 => PRGSize::Size16k(match reg & 0x04 >> 2 {
+                    0 => {
+                        PRGSize::Size32k
+                    },
+                    1 => PRGSize::Size16k(match (reg & 0x04) >> 2 {
                         0 => PRGSwap::SwapC000,
                         1 => PRGSwap::Swap8000,
                         _ => panic!(),
@@ -164,6 +171,32 @@ mod mmc1 {
                     _ => panic!(),
                 },
             }
+        }
+    }
+
+    impl From<&ConfigReg> for u8 {
+        fn from(c: &ConfigReg) -> u8 {
+            let m = match c.mirroring {
+                Mirroring::OneScreen => 0,
+                Mirroring::UpperBank => 1,
+                Mirroring::Vertical => 2,
+                Mirroring::Horizontal => 3,
+            };
+            let s = match &c.prg_swapping {
+                PRGSize::Size32k => 0,
+                PRGSize::Size16k(swap) => match swap {
+                    PRGSwap::SwapC000 => 2,
+                    PRGSwap::Swap8000 => 3
+                }
+            };
+            let c = match &c.chr_swapping {
+                CHRSize::Size8k => 0,
+                CHRSize::Size4k => 1
+            };
+            
+            let ret = m + (s << 2) + (c << 4);
+            println!("{},{},{} -> {:x}",m,s,c,ret);
+            ret
         }
     }
 
@@ -182,10 +215,15 @@ mod mmc1 {
         }
     }
 
+    enum MMC1Chr {
+        Ram([u8; 0x2000]),
+        Rom(Vec<u8>)
+    }
     pub struct CartridgeMapper1 {
-        ram: [u8; 0x2000],
+        prg_ram: [u8; 0x2000],
         prg_rom: Vec<[u8; 0x4000]>,
-        chr_rom: Vec<u8>,
+        // chr_rom: Vec<u8>,
+        chr: MMC1Chr,
         shift_register: u8,
         control_register: ConfigReg,
         chr_bank0_register: u8,
@@ -204,9 +242,10 @@ mod mmc1 {
                 );
             }
             Self {
-                ram: [0; 0x2000],
+                prg_ram: [0; 0x2000], // TODO: battery
                 prg_rom,
-                chr_rom: Vec::new(), // todo
+                // chr_rom: Vec::new(), // todo:
+                chr: if chr.len() > 0 {MMC1Chr::Rom(chr)} else {MMC1Chr::Ram([0; 0x2000])},
                 shift_register: 0x10,
                 control_register: ConfigReg {
                     mirroring: nt_mirroring,
@@ -221,7 +260,7 @@ mod mmc1 {
 
         fn map_address(&self, address: u16) -> (&[u8], usize) {
             match address {
-                0x6000..=0x7FFF => (&self.ram, address as usize - 0x6000),
+                0x6000..=0x7FFF => (&self.prg_ram, address as usize - 0x6000),
                 0x8000..=0xFFFF => {
                     match &self.control_register.prg_swapping {
                         PRGSize::Size32k => {
@@ -275,7 +314,7 @@ mod mmc1 {
         fn write_byte(&mut self, address: u16, val: u8) {
             // println!("writing byte {:x}",address);
             match address {
-                0x6000..=0x7FFF => self.ram[address as usize - 0x6000] = val,
+                0x6000..=0x7FFF => self.prg_ram[address as usize - 0x6000] = val,
                 0x8000..=0xFFFF => {
                     if val & 0x80 != 0 {
                         self.shift_register = 0x10;
@@ -284,10 +323,12 @@ mod mmc1 {
                         self.shift_register >>= 1;
                         self.shift_register |= (val & 0x01) << 4;
                         if done {
-                            println!("MMC1 CFG SWRITCH: {:x} -> {:x}", address, self.shift_register);
+                            println!("MMC1 CFG SWITCH: {:x} -> {:x}", address, self.shift_register);
                             match address {
                                 0x8000..=0x9FFF => {
-                                    self.control_register = ConfigReg::new(self.shift_register)
+                                    let new_reg = ConfigReg::new(self.shift_register);
+                                    println!("CTRL REG {:x} -> {:x}",u8::from(&self.control_register), u8::from(&new_reg));
+                                    self.control_register = new_reg;
                                 }
                                 0xA000..=0xBFFF => self.chr_bank0_register = self.shift_register, // TODO: use it correctly
                                 0xC000..=0xDFFF => self.chr_bank1_register = self.shift_register, // TODO: use it correctly todo!(),
@@ -306,11 +347,26 @@ mod mmc1 {
 
 
         fn get_chr(&self) -> &[u8; 0x2000] {
-            todo!()
+            // TODO: bank switching
+            match &self.chr {
+                MMC1Chr::Ram(ram) => ram,
+                MMC1Chr::Rom(rom) => todo!()
+            }
         }
 
         fn get_nt_mirroring(&self) -> Mirroring {
             self.control_register.mirroring
+        }
+        
+        fn write_byte_chr(&mut self, address: u16, val: u8) {
+            match &mut self.chr {
+                MMC1Chr::Ram(ram) => {
+                    ram[address as usize] = val;
+                },
+                MMC1Chr::Rom(_) => {
+                    panic!();
+                }
+            }
         }
     }
 }
@@ -327,6 +383,7 @@ pub fn load_rom(path: String) -> Result<Box<dyn Cartridge>, String> {
     } else {
         panic!("Invalid cartridge!");
     }
+    println!("{:?}",header);
 
     let prg_rom_size = (header[4] as usize) * 16384;
     let chr_rom_size = (header[5] as usize) * 8192;
@@ -350,6 +407,7 @@ pub fn load_rom(path: String) -> Result<Box<dyn Cartridge>, String> {
     };
     // TODO: interpret flags, v2
     // TODO: trainer
+    // TODO: battery ram save
 
     let prg_addr = 16;
     let prg_data = &bytes[prg_addr..(prg_addr + prg_rom_size)];

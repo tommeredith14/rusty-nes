@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, os::unix::raw::off_t, rc::Rc};
 
 use super::{cartridge::Cartridge, cartridge::Mirroring, memory::MemoryMap};
 
@@ -552,7 +552,9 @@ impl Ppu {
     pub fn write_ppu_byte(&mut self, addr: u16, val: u8) {
         let parsed_addr = map_ppu_addr(addr);
         match parsed_addr {
-            PpuAddress::Chr(_) => (),//panic!("PPU writing to chr"),
+            PpuAddress::Chr(offset) => {//panic!("PPU writing to chr"),
+                self.cartridge.as_ref().unwrap().borrow_mut().write_byte_chr(offset, val);
+            },
             PpuAddress::Nametable(offset) => {
                 let nt = match self.mirroring {
                     Mirroring::Horizontal => if offset < 0x800 {
@@ -754,7 +756,11 @@ impl Ppu {
             let addr = s_id * 4;
             let sprite_y = self.oam[addr] as usize + 1;
             // if (sprite_y..sprite_y+8).contains(&y) { // TODO: 8x16 sprites
-            if sprite_y <= y && y < sprite_y+8 {
+            let sprite_height = match self.reg.ppuctrl.sprite_size {
+                SpriteSize::Sprite8x8 => 8,
+                SpriteSize::Sprite8x16 => 16,
+            };
+            if sprite_y <= y && y < sprite_y+sprite_height {
                 self.secondary_oam[self.state.num_2oam].copy_from_slice(&self.oam[addr..addr+4]);
                 if s_id == 0 {
                     self.state.sprite0_det = true;
@@ -784,12 +790,23 @@ impl Ppu {
         (chr_hi, chr_lo)
     }
     fn lookup_chr_sprite(&self, chr_id: u8, row: u8, col: u8) -> u8 {
-        let chr_addr = {
-            // TODO: 8x16 sprites
-            let mut chr_addr = self.reg.ppuctrl.sprite_pt_addr as usize; // Which pattern table
-            chr_addr += (chr_id as usize) << 4; // Which sprite
-            chr_addr += row as usize; // Which row within the tile
-            chr_addr
+        let chr_addr = match self.reg.ppuctrl.sprite_size {
+            SpriteSize::Sprite8x8 => {
+                // TODO: 8x16 sprites
+                let mut chr_addr = self.reg.ppuctrl.sprite_pt_addr as usize; // Which pattern table
+                chr_addr += (chr_id as usize) << 4; // Which sprite
+                chr_addr += row as usize; // Which row within the tile
+                chr_addr
+            },
+            SpriteSize::Sprite8x16 => {
+                let mut chr_addr = if chr_id & 0x01 == 0 { 0x0000 } else { 0x1000 };
+                chr_addr += ((chr_id & 0xFE) as usize) << 4;
+                chr_addr += (row % 8) as usize;
+                if row >= 8 {
+                    chr_addr += 1 << 4
+                }
+                chr_addr
+            }
         };
 
         let bit_num = 7 - (col%8);
@@ -895,7 +912,10 @@ impl Ppu {
     // println!("y: {}, sy: {}", y, sy);
                                 let cy = match attr.flip_vert {
                                     false => y - sy,
-                                    true => 7 - (y - sy)
+                                    true => (match self.reg.ppuctrl.sprite_size {
+                                        SpriteSize::Sprite8x8 => 7,
+                                        SpriteSize::Sprite8x16 => 15,
+                                    }) - (y - sy)
                                 } as u8;
                                 let chr_val = self.lookup_chr_sprite(chr_id, cy, cx);
                                 if chr_val != 0 {

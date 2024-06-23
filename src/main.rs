@@ -114,7 +114,8 @@ impl Application for Hello {
     fn new(_flags: ()) -> (Hello, Command<Self::Message>) {
         let mut nes = Nes::default();
         //nes.load_rom(String::from("donkey_kong.nes"));
-         nes.load_rom(String::from("super_mario_brothers.nes"));
+        //  nes.load_rom(String::from("super_mario_brothers.nes"));
+         nes.load_rom(String::from("zelda.nes"));
         // nes.load_rom(String::from("nes-test-roms/full_palette/full_palette.nes"));
         // nes.load_rom(String::from("nes-test-roms/ppu_vbl_nmi/rom_singles/01-vbl_basics.nes"));
         (Hello {

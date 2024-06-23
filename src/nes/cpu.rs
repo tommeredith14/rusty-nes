@@ -1413,7 +1413,7 @@ impl From<u8> for InstructionType {
             0xFD => InstructionType::Alu(AluInstruction::Sbc, AddressMode::AbsX),
             0xFE => InstructionType::Rmw(RmwInstruction::Inc, AddressMode::AbsX),
 
-            _ => todo!(),
+            _ => todo!("Instruction {} not implemented!", instruction),
         }
     }
 }
