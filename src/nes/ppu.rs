@@ -1,81 +1,126 @@
-use std::{cell::RefCell, os::unix::raw::off_t, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
-use super::{cartridge::Cartridge, cartridge::Mirroring, memory::MemoryMap};
+use super::{cartridge::Cartridge, cartridge::Mirroring};
 
 // use eframe::glow::MAX_FRAGMENT_ATOMIC_COUNTERS;
 // use iced::alignment::Horizontal;
 use image::{self, RgbImage};
 // use show_image;
 
-static SYSTEM_PALETTE: [(u8,u8,u8); 64] = [
-    (0x80, 0x80, 0x80), (0x00, 0x3D, 0xA6), (0x00, 0x12, 0xB0), (0x44, 0x00, 0x96), (0xA1, 0x00, 0x5E), 
-    (0xC7, 0x00, 0x28), (0xBA, 0x06, 0x00), (0x8C, 0x17, 0x00), (0x5C, 0x2F, 0x00), (0x10, 0x45, 0x00), 
-    (0x05, 0x4A, 0x00), (0x00, 0x47, 0x2E), (0x00, 0x41, 0x66), (0x00, 0x00, 0x00), (0x05, 0x05, 0x05), 
-    (0x05, 0x05, 0x05), (0xC7, 0xC7, 0xC7), (0x00, 0x77, 0xFF), (0x21, 0x55, 0xFF), (0x82, 0x37, 0xFA), 
-    (0xEB, 0x2F, 0xB5), (0xFF, 0x29, 0x50), (0xFF, 0x22, 0x00), (0xD6, 0x32, 0x00), (0xC4, 0x62, 0x00), 
-    (0x35, 0x80, 0x00), (0x05, 0x8F, 0x00), (0x00, 0x8A, 0x55), (0x00, 0x99, 0xCC), (0x21, 0x21, 0x21), 
-    (0x09, 0x09, 0x09), (0x09, 0x09, 0x09), (0xFF, 0xFF, 0xFF), (0x0F, 0xD7, 0xFF), (0x69, 0xA2, 0xFF), 
-    (0xD4, 0x80, 0xFF), (0xFF, 0x45, 0xF3), (0xFF, 0x61, 0x8B), (0xFF, 0x88, 0x33), (0xFF, 0x9C, 0x12), 
-    (0xFA, 0xBC, 0x20), (0x9F, 0xE3, 0x0E), (0x2B, 0xF0, 0x35), (0x0C, 0xF0, 0xA4), (0x05, 0xFB, 0xFF), 
-    (0x5E, 0x5E, 0x5E), (0x0D, 0x0D, 0x0D), (0x0D, 0x0D, 0x0D), (0xFF, 0xFF, 0xFF), (0xA6, 0xFC, 0xFF), 
-    (0xB3, 0xEC, 0xFF), (0xDA, 0xAB, 0xEB), (0xFF, 0xA8, 0xF9), (0xFF, 0xAB, 0xB3), (0xFF, 0xD2, 0xB0), 
-    (0xFF, 0xEF, 0xA6), (0xFF, 0xF7, 0x9C), (0xD7, 0xE8, 0x95), (0xA6, 0xED, 0xAF), (0xA2, 0xF2, 0xDA), 
-    (0x99, 0xFF, 0xFC), (0xDD, 0xDD, 0xDD), (0x11, 0x11, 0x11), (0x11, 0x11, 0x11),
-    ];
-enum NtBase {
-    Base2000,
-    Base2400,
-    Base2800,
-    Base2C00
-}
+static SYSTEM_PALETTE: [(u8, u8, u8); 64] = [
+    (0x80, 0x80, 0x80),
+    (0x00, 0x3D, 0xA6),
+    (0x00, 0x12, 0xB0),
+    (0x44, 0x00, 0x96),
+    (0xA1, 0x00, 0x5E),
+    (0xC7, 0x00, 0x28),
+    (0xBA, 0x06, 0x00),
+    (0x8C, 0x17, 0x00),
+    (0x5C, 0x2F, 0x00),
+    (0x10, 0x45, 0x00),
+    (0x05, 0x4A, 0x00),
+    (0x00, 0x47, 0x2E),
+    (0x00, 0x41, 0x66),
+    (0x00, 0x00, 0x00),
+    (0x05, 0x05, 0x05),
+    (0x05, 0x05, 0x05),
+    (0xC7, 0xC7, 0xC7),
+    (0x00, 0x77, 0xFF),
+    (0x21, 0x55, 0xFF),
+    (0x82, 0x37, 0xFA),
+    (0xEB, 0x2F, 0xB5),
+    (0xFF, 0x29, 0x50),
+    (0xFF, 0x22, 0x00),
+    (0xD6, 0x32, 0x00),
+    (0xC4, 0x62, 0x00),
+    (0x35, 0x80, 0x00),
+    (0x05, 0x8F, 0x00),
+    (0x00, 0x8A, 0x55),
+    (0x00, 0x99, 0xCC),
+    (0x21, 0x21, 0x21),
+    (0x09, 0x09, 0x09),
+    (0x09, 0x09, 0x09),
+    (0xFF, 0xFF, 0xFF),
+    (0x0F, 0xD7, 0xFF),
+    (0x69, 0xA2, 0xFF),
+    (0xD4, 0x80, 0xFF),
+    (0xFF, 0x45, 0xF3),
+    (0xFF, 0x61, 0x8B),
+    (0xFF, 0x88, 0x33),
+    (0xFF, 0x9C, 0x12),
+    (0xFA, 0xBC, 0x20),
+    (0x9F, 0xE3, 0x0E),
+    (0x2B, 0xF0, 0x35),
+    (0x0C, 0xF0, 0xA4),
+    (0x05, 0xFB, 0xFF),
+    (0x5E, 0x5E, 0x5E),
+    (0x0D, 0x0D, 0x0D),
+    (0x0D, 0x0D, 0x0D),
+    (0xFF, 0xFF, 0xFF),
+    (0xA6, 0xFC, 0xFF),
+    (0xB3, 0xEC, 0xFF),
+    (0xDA, 0xAB, 0xEB),
+    (0xFF, 0xA8, 0xF9),
+    (0xFF, 0xAB, 0xB3),
+    (0xFF, 0xD2, 0xB0),
+    (0xFF, 0xEF, 0xA6),
+    (0xFF, 0xF7, 0x9C),
+    (0xD7, 0xE8, 0x95),
+    (0xA6, 0xED, 0xAF),
+    (0xA2, 0xF2, 0xDA),
+    (0x99, 0xFF, 0xFC),
+    (0xDD, 0xDD, 0xDD),
+    (0x11, 0x11, 0x11),
+    (0x11, 0x11, 0x11),
+];
 
 #[derive(Clone, Copy)]
 enum VramInc {
     Inc1,
-    Inc32
+    Inc32,
 }
 enum SpriteSize {
     Sprite8x8,
-    Sprite8x16
+    Sprite8x16,
 }
+
+#[allow(unused)]
 struct PpuCtrl {
-    //nt_base_x: bool,
-    //nt_base_y: bool,
     vram_inc: VramInc,
     sprite_pt_addr: u16,
     bg_pt_addr: u16,
     sprite_size: SpriteSize,
     ext_out: bool,
-    nmi: bool
+    nmi: bool,
 }
 impl From<u8> for PpuCtrl {
     fn from(value: u8) -> Self {
         let sprite_size = match (value & 0x20) != 0 {
             false => SpriteSize::Sprite8x8,
-            true => SpriteSize::Sprite8x16
+            true => SpriteSize::Sprite8x16,
         };
-              
-        Self { 
+
+        Self {
             //nt_base_x: value & 0x01 != 0,
             //nt_base_y: value & 0x02 != 0,
             vram_inc: match (value & 0x04) != 0 {
                 false => VramInc::Inc1,
-                true  => VramInc::Inc32
+                true => VramInc::Inc32,
             },
             sprite_pt_addr: match sprite_size {
                 SpriteSize::Sprite8x16 => 0x0000,
                 SpriteSize::Sprite8x8 => match (value & 0x08) != 0 {
                     false => 0x0000,
-                    true  => 0x1000
-                }
+                    true => 0x1000,
+                },
             },
             bg_pt_addr: match (value & 0x10) != 0 {
                 false => 0x0000,
-                true  => 0x1000
+                true => 0x1000,
             },
             sprite_size,
             ext_out: (value & 0x40) != 0,
-            nmi:  (value & 0x80) != 0
+            nmi: (value & 0x80) != 0,
         }
     }
 }
@@ -85,6 +130,7 @@ impl Default for PpuCtrl {
     }
 }
 
+#[allow(unused)]
 struct PpuMask {
     grayscale: bool,
     show_left_bg: bool,
@@ -93,19 +139,19 @@ struct PpuMask {
     show_sprites: bool,
     emph_red: bool,
     emph_blue: bool,
-    emph_green: bool
+    emph_green: bool,
 }
 impl From<u8> for PpuMask {
     fn from(value: u8) -> Self {
-        Self { 
-            grayscale:        (value & 0x01) != 0,
-            show_left_bg:     (value & 0x02) != 0,
+        Self {
+            grayscale: (value & 0x01) != 0,
+            show_left_bg: (value & 0x02) != 0,
             show_left_sprite: (value & 0x04) != 0,
-            show_bg:          (value & 0x08) != 0,
-            show_sprites:     (value & 0x10) != 0,
-            emph_red:         (value & 0x20) != 0,
-            emph_blue:        (value & 0x40) != 0,
-            emph_green:       (value & 0x80) != 0 
+            show_bg: (value & 0x08) != 0,
+            show_sprites: (value & 0x10) != 0,
+            emph_red: (value & 0x20) != 0,
+            emph_blue: (value & 0x40) != 0,
+            emph_green: (value & 0x80) != 0,
         }
     }
 }
@@ -119,16 +165,15 @@ impl Default for PpuMask {
 struct PpuStatus {
     sprite_overflow: bool,
     sprite_0_hit: bool,
-    vblank: bool
+    vblank: bool,
 }
 impl From<&PpuStatus> for u8 {
     fn from(value: &PpuStatus) -> Self {
-        (if value.sprite_overflow {0x20} else {0}) |
-        (if value.sprite_0_hit {0x40} else {0}) |
-        (if value.vblank {0x80} else {0})
+        (if value.sprite_overflow { 0x20 } else { 0 })
+            | (if value.sprite_0_hit { 0x40 } else { 0 })
+            | (if value.vblank { 0x80 } else { 0 })
     }
 }
-
 
 // struct PpuScroll {
 //     scroll_x: u8,
@@ -209,21 +254,21 @@ impl From<&PpuStatus> for u8 {
 //     }
 // }
 
-#[derive(Default,Clone, Copy)]
+#[derive(Default, Clone, Copy)]
 struct VRamAddr {
     coarse_x: u8,
     coarse_y: u8,
     nt_x: bool,
     nt_y: bool,
-    fine_y: u8
+    fine_y: u8,
 }
 impl From<&VRamAddr> for u16 {
     fn from(v: &VRamAddr) -> Self {
-        ((v.fine_y as u16) << 12) |
-        (if v.nt_y {0x800} else {0}) |
-        (if v.nt_x {0x400} else {0}) |
-        ((v.coarse_y as u16) << 5) |
-        (v.coarse_x as u16)
+        ((v.fine_y as u16) << 12)
+            | (if v.nt_y { 0x800 } else { 0 })
+            | (if v.nt_x { 0x400 } else { 0 })
+            | ((v.coarse_y as u16) << 5)
+            | (v.coarse_x as u16)
     }
 }
 impl From<u16> for VRamAddr {
@@ -233,7 +278,7 @@ impl From<u16> for VRamAddr {
             coarse_y: ((v & 0b11_1110_0000) >> 5) as u8,
             nt_x: (v & 0x400) != 0,
             nt_y: (v & 0x800) != 0,
-            fine_y: ((v & 0x3800) >> 12) as u8
+            fine_y: ((v & 0x3800) >> 12) as u8,
         }
     }
 }
@@ -243,7 +288,7 @@ struct InternalRegisters {
     v: VRamAddr,
     t: VRamAddr,
     x: u8,
-    w: bool
+    w: bool,
 }
 
 impl InternalRegisters {
@@ -304,13 +349,9 @@ impl InternalRegisters {
                 29 => {
                     self.v.nt_y = !self.v.nt_y;
                     0
-                },
-                31 => {
-                    0
-                },
-                _ => {
-                    y + 1
-                },
+                }
+                31 => 0,
+                _ => y + 1,
             };
             self.v.coarse_y = y;
         }
@@ -331,7 +372,7 @@ impl InternalRegisters {
         let mut v = u16::from(&self.v);
         v += match inc {
             VramInc::Inc1 => 1,
-            VramInc::Inc32 => 32
+            VramInc::Inc32 => 32,
         };
         self.v = v.into()
     }
@@ -362,34 +403,34 @@ struct PpuRegisters {
 
 enum PpuAddress {
     Chr(u16),
-    Nametable(u16), /// TODO: nametable id?
-    Pallette(u16)
+    Nametable(u16),
+    /// TODO: nametable id?
+    Pallette(u16),
 }
 fn map_ppu_addr(addr: u16) -> PpuAddress {
     let addr = addr % 0x4000;
     match addr {
         0x0000..=0x1FFF => PpuAddress::Chr(addr),
-        0x2000..=0x3EFF => PpuAddress::Nametable((addr-0x2000) % 0x1000),
-        0x3F00..=0x3FFF =>PpuAddress::Pallette((addr-0x3F00) % 0x20),
-        _ => panic!("Invalid ppu addr")
+        0x2000..=0x3EFF => PpuAddress::Nametable((addr - 0x2000) % 0x1000),
+        0x3F00..=0x3FFF => PpuAddress::Pallette((addr - 0x3F00) % 0x20),
+        _ => panic!("Invalid ppu addr"),
     }
 }
 
-#[derive(Default,Clone, Copy)]
+#[derive(Default, Clone, Copy)]
 struct Pipeline {
-    nt: u8,
     at_hi: u8,
     at_lo: u8,
     pt_lo: u16,
     pt_hi: u16,
     at_latch_hi: u8,
-    at_latch_lo: u8
+    at_latch_lo: u8,
 }
 impl Pipeline {
     fn transfer(&mut self, pt_hi: u8, pt_lo: u8, at: u8) {
-        self.pt_hi = ((pt_hi as u16)) | (self.pt_hi & 0xFF00);
-        self.pt_lo = ((pt_lo as u16)) | (self.pt_lo & 0xFF00);
-        self.at_latch_hi = (at & 0x02) >>1;
+        self.pt_hi = (pt_hi as u16) | (self.pt_hi & 0xFF00);
+        self.pt_lo = (pt_lo as u16) | (self.pt_lo & 0xFF00);
+        self.at_latch_hi = (at & 0x02) >> 1;
         self.at_latch_lo = at & 0x01;
         // println!("{:02x}<-{},{:02x}<-{}",self.at_hi, self.at_latch_hi, self.at_lo, self.at_latch_lo);
     }
@@ -397,20 +438,20 @@ impl Pipeline {
     fn read(&self, fine_x: u8) -> (u8, u8) {
         let mut pt = 0;
         let mut at = 0;
-        let shift = 7-fine_x;
+        let shift = 7 - fine_x;
         let mask = 1 << shift;
 
-        pt |= (self.pt_hi & ((mask as u16) << 8));
-        at |= (self.at_hi & (mask));
+        pt |= self.pt_hi & ((mask as u16) << 8);
+        at |= self.at_hi & (mask);
 
-        pt >>= ((shift + 8)- 1);
+        pt >>= (shift + 8) - 1;
         if shift == 0 {
             at <<= 1;
         } else {
-            at >>= (shift - 1);
+            at >>= shift - 1;
         }
 
-        pt |= (self.pt_lo & ((mask as u16)<<8)) >> (shift+8);        
+        pt |= (self.pt_lo & ((mask as u16) << 8)) >> (shift + 8);
         at |= (self.at_lo & (mask)) >> (shift);
         (pt as u8, at)
     }
@@ -424,7 +465,6 @@ impl Pipeline {
     }
 }
 
-
 #[derive(Default)]
 struct PpuState {
     frame: u32,
@@ -433,8 +473,6 @@ struct PpuState {
     pipeline: Pipeline,
     num_2oam: usize,
     sprite0_det: bool,
-    chr_cache: (u8, u8),
-    attr_cache: u8
 }
 
 pub struct Ppu {
@@ -447,15 +485,15 @@ pub struct Ppu {
     state: PpuState,
     fb: RgbImage,
     mirroring: Mirroring,
-    secondary_oam: [[u8; 4];8],
-    read_buf: u8
+    secondary_oam: [[u8; 4]; 8],
+    read_buf: u8,
 }
 
 struct SpriteAttributes {
     palette: u8,
     bg_priority: bool,
     flip_horz: bool,
-    flip_vert: bool
+    flip_vert: bool,
 }
 impl From<u8> for SpriteAttributes {
     fn from(val: u8) -> Self {
@@ -463,30 +501,29 @@ impl From<u8> for SpriteAttributes {
             palette: val & 0x03,
             bg_priority: (val & 0x20) != 0,
             flip_horz: (val & 0x40) != 0,
-            flip_vert: (val & 0x80) != 0
+            flip_vert: (val & 0x80) != 0,
         }
     }
 }
 
 impl Ppu {
     pub fn new() -> Self {
-        let mut ppu = Self {
+        Self {
             cartridge: None,
             reg: PpuRegisters::default(),
-            nametable1: [0;0x400],
-            nametable2: [0;0x400],
+            nametable1: [0; 0x400],
+            nametable2: [0; 0x400],
             oam: [0; 256],
             pallette: [0; 0x20],
             state: PpuState::default(),
             fb: RgbImage::new(256, 240),
             mirroring: Mirroring::Horizontal,
-            secondary_oam: [[0;4];8],
-            read_buf: 0
-        };
-        // ppu.reg.ppustatus.vblank = true; // TODO: remove
-        ppu
+            secondary_oam: [[0; 4]; 8],
+            read_buf: 0,
+        }
     }
 
+    #[allow(clippy::let_and_return)]
     pub fn read_reg(&mut self, addr: u16) -> u8 {
         // TODO: invalid reads?
         let ret = match addr {
@@ -494,11 +531,11 @@ impl Ppu {
             0x01 => panic!(),
             0x02 => {
                 // TODO: unlatching, clearing
-                let ret : u8 = (&self.reg.ppustatus).into();
+                let ret: u8 = (&self.reg.ppustatus).into();
                 self.reg.ppustatus.vblank = false;
                 self.reg.internal.unlatch();
                 ret
-            },
+            }
             0x03 => panic!(),
             0x04 => todo!(), // OAMDATA,
             0x05 => panic!(),
@@ -511,9 +548,9 @@ impl Ppu {
                 self.reg.internal.inc_addr(self.reg.ppuctrl.vram_inc);
                 // println!("now {:4x}",self.reg.internal.get_addr());
                 ret
-            }, // PPUDATA
+            } // PPUDATA
 
-            _ => panic!("Invalid ppu read from {:x}",addr)
+            _ => panic!("Invalid ppu read from {:x}", addr),
         };
         //println!("R PPU REG 0x20{:2x} => {:2x}", addr, ret);
         ret
@@ -525,52 +562,61 @@ impl Ppu {
             0x00 => {
                 self.reg.internal.write_nt(val);
                 self.reg.ppuctrl = val.into()
-            },
+            }
             0x01 => self.reg.ppumask = val.into(),
             0x02 => {} // Can't write to status
             0x03 => self.reg.oamaddr = val,
-            0x04 => { // OAMDATA,
+            0x04 => {
+                // OAMDATA,
                 self.oam[self.reg.oamaddr as usize] = val;
                 self.reg.oamaddr = self.reg.oamaddr.wrapping_add(1)
-            },
+            }
             0x05 => self.reg.internal.write_scroll(val),
             0x06 => self.reg.internal.write_addr(val),
-            0x07 => { // PPUDATA
+            0x07 => {
+                // PPUDATA
                 let addr = self.reg.internal.get_addr();
                 // println!("W {:2x} to ppu {:4x}",val, addr);
                 self.write_ppu_byte(addr, val);
                 self.reg.internal.inc_addr(self.reg.ppuctrl.vram_inc);
                 // println!("now {:4x}",self.reg.internal.get_addr());
-            },
+            }
 
-            _ => panic!("Invalid ppu write to {:x}",addr)
+            _ => panic!("Invalid ppu write to {:x}", addr),
         }
-
     }
-
 
     pub fn write_ppu_byte(&mut self, addr: u16, val: u8) {
         let parsed_addr = map_ppu_addr(addr);
         match parsed_addr {
-            PpuAddress::Chr(offset) => {//panic!("PPU writing to chr"),
-                self.cartridge.as_ref().unwrap().borrow_mut().write_byte_chr(offset, val);
-            },
+            PpuAddress::Chr(offset) => {
+                //panic!("PPU writing to chr"),
+                self.cartridge
+                    .as_ref()
+                    .unwrap()
+                    .borrow_mut()
+                    .write_byte_chr(offset, val);
+            }
             PpuAddress::Nametable(offset) => {
                 let nt = match self.mirroring {
-                    Mirroring::Horizontal => if offset < 0x800 {
-                        &mut self.nametable1
-                    } else {
-                        &mut self.nametable2
-                    },
-                    Mirroring::Vertical => if offset % 0x800 <0x400 {
-                        &mut self.nametable1
-                    } else {
-                        &mut self.nametable2
+                    Mirroring::Horizontal => {
+                        if offset < 0x800 {
+                            &mut self.nametable1
+                        } else {
+                            &mut self.nametable2
+                        }
                     }
-                    _ => panic!()
+                    Mirroring::Vertical => {
+                        if offset % 0x800 < 0x400 {
+                            &mut self.nametable1
+                        } else {
+                            &mut self.nametable2
+                        }
+                    }
+                    _ => panic!(),
                 };
                 nt[offset as usize & 0x3FF] = val
-            },
+            }
             PpuAddress::Pallette(offset) => {
                 let offset = offset as usize;
                 self.pallette[offset] = val;
@@ -584,24 +630,30 @@ impl Ppu {
     pub fn read_ppu_byte(&self, addr: u16) -> u8 {
         let parsed_addr = map_ppu_addr(addr);
         match parsed_addr {
-            PpuAddress::Chr(offset) => self.cartridge.as_ref().unwrap().borrow().get_chr()[offset as usize],
+            PpuAddress::Chr(offset) => {
+                self.cartridge.as_ref().unwrap().borrow().get_chr()[offset as usize]
+            }
             PpuAddress::Nametable(offset) => {
                 let nt = match self.mirroring {
-                    Mirroring::Horizontal => if offset < 0x800 {
-                        &self.nametable1
-                    } else {
-                        &self.nametable2
-                    },
-                    Mirroring::Vertical => if offset % 0x800 <0x400 {
-                        &self.nametable1
-                    } else {
-                        &self.nametable2
+                    Mirroring::Horizontal => {
+                        if offset < 0x800 {
+                            &self.nametable1
+                        } else {
+                            &self.nametable2
+                        }
                     }
-                    _ => panic!()
+                    Mirroring::Vertical => {
+                        if offset % 0x800 < 0x400 {
+                            &self.nametable1
+                        } else {
+                            &self.nametable2
+                        }
+                    }
+                    _ => panic!(),
                 };
                 let offset = offset % 0x400;
                 nt[offset as usize]
-            },
+            }
             PpuAddress::Pallette(offset) => {
                 let offset = offset as usize;
                 if offset == 0x10 {
@@ -620,14 +672,15 @@ impl Ppu {
         }
     }
 
-    fn fetch_nametable(&self) -> u8 {//, x: usize, y: usize) -> u8 {
+    fn fetch_nametable(&self) -> u8 {
+        //, x: usize, y: usize) -> u8 {
         let addr = self.reg.internal.get_tile_addr();
         self.read_ppu_byte(addr)
     }
     fn read_nametable(&self, x: usize, y: usize) -> u8 {
-        let tile_x = x/8;
-        let tile_y = y/8;
-        
+        let tile_x = x / 8;
+        let tile_y = y / 8;
+
         let nt = match self.mirroring {
             Mirroring::Horizontal => {
                 if tile_y < 30 {
@@ -642,8 +695,8 @@ impl Ppu {
                 } else {
                     self.nametable2
                 }
-            },
-            _ => panic!()
+            }
+            _ => panic!(),
         };
 
         let tile_y = tile_y % 30;
@@ -670,20 +723,18 @@ impl Ppu {
                 0 => 4, // bottom left
                 1 => 6, // bottom right
                 _ => panic!(),
-            }
-            _ => panic!()
+            },
+            _ => panic!(),
         };
         //println!("{:04x}: {:02x} -> {}",addr,attr_byte,(attr_byte & (0x3 << shift)) >> shift);
         (attr_byte & (0x3 << shift)) >> shift
-
     }
     fn read_attribute_table(&self, x: usize, y: usize) -> u8 {
-
         // let x = (x + self.reg.ppuscroll.get_x() as usize + if self.reg.ppuctrl.nt_base_x {256} else {0})%512;
         // let y = (y + self.reg.ppuscroll.get_y() as usize + if self.reg.ppuctrl.nt_base_x {240} else {0})%480;
-        let block_x = x/16;
-        let block_y = y/16;
-        
+        let block_x = x / 16;
+        let block_y = y / 16;
+
         let nt = match self.mirroring {
             Mirroring::Horizontal => {
                 if block_y < 15 {
@@ -698,8 +749,8 @@ impl Ppu {
                 } else {
                     self.nametable2
                 }
-            },
-            _ => panic!()
+            }
+            _ => panic!(),
         };
 
         let block_y = block_y % 15;
@@ -710,8 +761,8 @@ impl Ppu {
 
         let attr_byte = nt[960 + chunk_y * 8 + chunk_x];
 
-        let sub_x = block_x - chunk_x*2;
-        let sub_y = block_y - chunk_y*2;
+        let sub_x = block_x - chunk_x * 2;
+        let sub_y = block_y - chunk_y * 2;
 
         let shift = match sub_y {
             0 => match sub_x {
@@ -723,8 +774,8 @@ impl Ppu {
                 0 => 4, // bottom left
                 1 => 6, // bottom right
                 _ => panic!(),
-            }
-            _ => panic!()
+            },
+            _ => panic!(),
         };
 
         (attr_byte & (0x3 << shift)) >> shift
@@ -736,7 +787,7 @@ impl Ppu {
         }
         self.state.num_2oam = 0;
 
-        let y = self.state.scanline  + 1; // Assess next row
+        let y = self.state.scanline + 1; // Assess next row
 
         // for s in self.oam.chunks(4) {
         //     let sprite_y = s[0] as usize + 1;
@@ -760,8 +811,8 @@ impl Ppu {
                 SpriteSize::Sprite8x8 => 8,
                 SpriteSize::Sprite8x16 => 16,
             };
-            if sprite_y <= y && y < sprite_y+sprite_height {
-                self.secondary_oam[self.state.num_2oam].copy_from_slice(&self.oam[addr..addr+4]);
+            if sprite_y <= y && y < sprite_y + sprite_height {
+                self.secondary_oam[self.state.num_2oam].copy_from_slice(&self.oam[addr..addr + 4]);
                 if s_id == 0 {
                     self.state.sprite0_det = true;
                 }
@@ -797,7 +848,7 @@ impl Ppu {
                 chr_addr += (chr_id as usize) << 4; // Which sprite
                 chr_addr += row as usize; // Which row within the tile
                 chr_addr
-            },
+            }
             SpriteSize::Sprite8x16 => {
                 let mut chr_addr = if chr_id & 0x01 == 0 { 0x0000 } else { 0x1000 };
                 chr_addr += ((chr_id & 0xFE) as usize) << 4;
@@ -809,14 +860,14 @@ impl Ppu {
             }
         };
 
-        let bit_num = 7 - (col%8);
+        let bit_num = 7 - (col % 8);
         // let mem_binding = self.memory.borrow();
         // let chr = self.cartridge.unwrap().borrow().get_chr();
         let cart_binding = self.cartridge.as_ref().unwrap().borrow();
         let chr = cart_binding.get_chr();
         // let chr = mem_binding.get_chr();
         let chr_lo = (chr[chr_addr] & (1 << bit_num)) >> bit_num;
-        let chr_hi = (chr[chr_addr + 0x08]& (1 << bit_num)) >> bit_num;
+        let chr_hi = (chr[chr_addr + 0x08] & (1 << bit_num)) >> bit_num;
         chr_hi << 1 | chr_lo
     }
 
@@ -838,7 +889,8 @@ impl Ppu {
             if self.state.scanline == 261 && (281..=305).contains(&cycle) {
                 self.reg.internal.reset_y();
             }
-            if ((1..=257).contains(&cycle) && cycle % 8 == 1) || (cycle == 329) {//|| cycle == 329 {
+            if ((1..=257).contains(&cycle) && cycle % 8 == 1) || (cycle == 329) {
+                //|| cycle == 329 {
                 let chr_id = self.fetch_nametable();
                 let (pt_hi, pt_lo) = self.lookup_chr_bg(chr_id, self.reg.internal.v.fine_y);
                 let at = self.fetch_attribute_table();
@@ -848,15 +900,11 @@ impl Ppu {
             }
         }
 
-        
-        
-        
-        
         if cycle != 0 {
             let x = cycle - 1;
             let y = self.state.scanline;
 
-            if x < 256 && y <240 {
+            if x < 256 && y < 240 {
                 // println!("Rendering {},{}",x,y);
 
                 let (bg_val, bg_palette) = self.state.pipeline.read(self.reg.internal.x);
@@ -865,10 +913,10 @@ impl Ppu {
                 }
                 // {
                 //     // let bg_x = (
-                //     //     x + self.reg.ppuscroll.get_x() as usize + 
+                //     //     x + self.reg.ppuscroll.get_x() as usize +
                 //     //     if self.reg.ppuctrl.nt_base_x {256} else {0})%512;
-                //     // let bg_y = (y + 
-                //     //     self.reg.ppuscroll.get_y() as usize + 
+                //     // let bg_y = (y +
+                //     //     self.reg.ppuscroll.get_y() as usize +
                 //     //     if self.reg.ppuctrl.nt_base_x {240} else {0})%480;
                 //     if x == 0 || x % 8 == 0 {
                 //         let chr_id = self.read_nametable(x, y);
@@ -900,26 +948,28 @@ impl Ppu {
                             let s = &self.secondary_oam[i];
                             let sx = s[3] as usize;
                             // if (sx..sx+8).contains(&x) {
-                            if sx <= x && x < sx+8 {
+                            if sx <= x && x < sx + 8 {
                                 let sy = s[0] as usize + 1;
                                 let chr_id = s[1];
                                 let attr = SpriteAttributes::from(s[2]);
-    // println!("x: {}, sx: {}", x, sx);
+                                // println!("x: {}, sx: {}", x, sx);
                                 let cx = match attr.flip_horz {
                                     false => x - sx,
-                                    true => 7 - (x - sx)
+                                    true => 7 - (x - sx),
                                 } as u8;
-    // println!("y: {}, sy: {}", y, sy);
+                                // println!("y: {}, sy: {}", y, sy);
                                 let cy = match attr.flip_vert {
                                     false => y - sy,
-                                    true => (match self.reg.ppuctrl.sprite_size {
-                                        SpriteSize::Sprite8x8 => 7,
-                                        SpriteSize::Sprite8x16 => 15,
-                                    }) - (y - sy)
+                                    true => {
+                                        (match self.reg.ppuctrl.sprite_size {
+                                            SpriteSize::Sprite8x8 => 7,
+                                            SpriteSize::Sprite8x16 => 15,
+                                        }) - (y - sy)
+                                    }
                                 } as u8;
                                 let chr_val = self.lookup_chr_sprite(chr_id, cy, cx);
                                 if chr_val != 0 {
-                                    sprite_data = Some((i,chr_val,attr));
+                                    sprite_data = Some((i, chr_val, attr));
                                     break;
                                 }
                             }
@@ -927,10 +977,22 @@ impl Ppu {
                     }
 
                     sprite_data
-                }.unwrap_or((0,0,SpriteAttributes { palette: 0, bg_priority: true , flip_horz: false, flip_vert: false}));
+                }
+                .unwrap_or((
+                    0,
+                    0,
+                    SpriteAttributes {
+                        palette: 0,
+                        bg_priority: true,
+                        flip_horz: false,
+                        flip_vert: false,
+                    },
+                ));
 
-                let bg_enable = self.reg.ppumask.show_bg && !(x < 8 && !self.reg.ppumask.show_left_bg);
-                let sprite_enable = self.reg.ppumask.show_sprites && !(x < 8 && !self.reg.ppumask.show_left_sprite);
+                let bg_enable =
+                    self.reg.ppumask.show_bg && (x >= 8 || self.reg.ppumask.show_left_bg);
+                let sprite_enable =
+                    self.reg.ppumask.show_sprites && (x >= 8 || self.reg.ppumask.show_left_sprite);
 
                 let mut color_id = if !self.reg.ppumask.show_bg && !self.reg.ppumask.show_sprites {
                     if (0x3f00..=0x3fff).contains(&self.reg.internal.get_addr()) {
@@ -942,11 +1004,13 @@ impl Ppu {
                     // Consider sprite
                     let (sprite_id, sprite_val, sprite_attr) = sprite_data;
                     if bg_enable && sprite_enable {
-                        let sprite0_hit = self.state.sprite0_det && sprite_id == 0 && sprite_val != 0 && bg_val != 0;
+                        let sprite0_hit = self.state.sprite0_det
+                            && sprite_id == 0
+                            && sprite_val != 0
+                            && bg_val != 0;
                         if sprite0_hit {
                             self.reg.ppustatus.sprite_0_hit = true;
-                            println!("Sprite0 hit! {} @ {},{}",sprite_id,x,y);
-
+                            println!("Sprite0 hit! {} @ {},{}", sprite_id, x, y);
                         }
                     }
 
@@ -954,19 +1018,21 @@ impl Ppu {
                         if sprite_val == 0 && bg_val == 0 {
                             self.pallette[0]
                         } else if bg_val == 0 {
-                            self.pallette[0x10 + sprite_attr.palette as usize*4 + sprite_val as usize]
+                            self.pallette
+                                [0x10 + sprite_attr.palette as usize * 4 + sprite_val as usize]
                         } else if sprite_val == 0 || sprite_attr.bg_priority {
-                            self.pallette[4*bg_palette as usize + bg_val as usize]
+                            self.pallette[4 * bg_palette as usize + bg_val as usize]
                         } else {
-                            self.pallette[0x10  + sprite_attr.palette as usize*4 + sprite_val as usize]
+                            self.pallette
+                                [0x10 + sprite_attr.palette as usize * 4 + sprite_val as usize]
                         }
                     } else {
                         // TODO?
-                        self.pallette[0x10 + sprite_attr.palette as usize*4 + sprite_val as usize]
+                        self.pallette[0x10 + sprite_attr.palette as usize * 4 + sprite_val as usize]
                     }
                 } else {
                     // No sprite
-                    self.pallette[4*bg_palette as usize + bg_val as usize]
+                    self.pallette[4 * bg_palette as usize + bg_val as usize]
                 };
 
                 // Apply grayscale
@@ -976,10 +1042,12 @@ impl Ppu {
                 // TODO: Apply color emphasis
 
                 // Render
-                if color_id > 0x3f {println!("weird color {}",color_id)}
+                if color_id > 0x3f {
+                    println!("weird color {}", color_id)
+                }
                 let color = SYSTEM_PALETTE[(color_id & 0x3f) as usize];
-                self.fb.put_pixel(x as u32, y as u32, image::Rgb([color.0, color.1, color.2]));
-
+                self.fb
+                    .put_pixel(x as u32, y as u32, image::Rgb([color.0, color.1, color.2]));
 
                 // if !self.reg.ppumask.show_bg && (0x3f00..=0x3fff).contains(&self.reg.ppuaddr.get()) {
                 //     let color_id = self.pallette[(self.reg.ppuaddr.get() as usize - 0x3f00) % 0x20];
@@ -1065,7 +1133,6 @@ impl Ppu {
         for _ in 0..cycles {
             self.state.cycle += 1;
 
-
             if self.state.scanline == 241 && self.state.cycle == 1 {
                 self.reg.ppustatus.vblank = true;
                 // TODO: Send interrupt
@@ -1076,11 +1143,15 @@ impl Ppu {
                 self.reg.ppustatus.vblank = false;
                 self.reg.ppustatus.sprite_0_hit = false;
             }
-            if self.state.cycle == 341 || (self.state.scanline == 261 && self.state.cycle == 340 && self.state.frame % 2 == 1) {
+            if self.state.cycle == 341
+                || (self.state.scanline == 261
+                    && self.state.cycle == 340
+                    && self.state.frame % 2 == 1)
+            {
                 self.state.scanline += 1;
                 self.state.cycle = 0;
-                if [24,32,128].contains(&self.state.scanline) {
-                    println!("Starting Line {}",self.state.scanline);
+                if [24, 32, 128].contains(&self.state.scanline) {
+                    println!("Starting Line {}", self.state.scanline);
                 }
             }
 
@@ -1098,28 +1169,30 @@ impl Ppu {
         self.fb.clone()
     }
 
-
     pub fn render_chr(&self) -> image::GrayImage {
         let binding = self.cartridge.as_ref().unwrap().borrow();
         // let chr_data = binding.get_chr();
         let chr_data = binding.get_chr();
-        let mut chr_img = image::GrayImage::new(16*9,32*9);
+        let mut chr_img = image::GrayImage::new(16 * 9, 32 * 9);
         for tilenum in 0..512 {
-            let bit1 = &chr_data[tilenum*16..tilenum*16+8];
-            let bit2 = &chr_data[tilenum*16+8..tilenum*16+16];
+            let bit1 = &chr_data[tilenum * 16..tilenum * 16 + 8];
+            let bit2 = &chr_data[tilenum * 16 + 8..tilenum * 16 + 16];
 
-            let mut bmp = [0u8; 64];
-            let mut img = image::GrayImage::new(8,8);
+            let mut img = image::GrayImage::new(8, 8);
             for row in 0..8 {
                 // println!("ROW {row}: {} + {}",bit1[row], bit2[row]);
                 for col in 0..8 {
-                    let shift = 7-col;
+                    let shift = 7 - col;
                     let b1 = (bit1[row] & (1u8 << shift)) >> shift;
                     let b2 = (bit2[row] & (1u8 << shift)) >> shift;
                     // println!("({row},{col}): {b1},{b2} = {}",(b1 + 2*b2) * 64);
-                    let val = (b1 + 2*b2) * 64;
-                    img.put_pixel(col, row as u32, image::Luma([(b1 + 2*b2) * 64]));
-                    chr_img.put_pixel(9*(tilenum%16) as u32 + col as u32, 9*(tilenum/16) as u32 +row as u32, image::Luma([val]))
+                    let val = (b1 + 2 * b2) * 64;
+                    img.put_pixel(col, row as u32, image::Luma([(b1 + 2 * b2) * 64]));
+                    chr_img.put_pixel(
+                        9 * (tilenum % 16) as u32 + col,
+                        9 * (tilenum / 16) as u32 + row as u32,
+                        image::Luma([val]),
+                    )
                 }
             }
             // img.save(format!("imgs/img_{}.bmp",tilenum)).unwrap();
@@ -1131,26 +1204,16 @@ impl Ppu {
         chr_img
     }
     pub fn render_nt(&self) -> image::RgbImage {
-        let binding = self.cartridge.as_ref().unwrap().borrow();
-        // let chr_data = binding.get_chr();
-        let chr_data = binding.get_chr();
         let size: (usize, usize) = match self.mirroring {
-            Mirroring::Horizontal => (256,480),
-            Mirroring::Vertical => (512,240),
-            _ => panic!()
+            Mirroring::Horizontal => (256, 480),
+            Mirroring::Vertical => (512, 240),
+            _ => panic!(),
         };
-        let mut nt_img = image::RgbImage::new(size.0 as u32,size.1 as u32);
-
-        // println!("SCROLL: {},{} ,   offset : {},{}",self.reg.ppuscroll.get_x(),self.reg.ppuscroll.get_y(), self.reg.ppuctrl.nt_base_x, self.reg.ppuctrl.nt_base_y);
-        // let x_min = (self.reg.ppuscroll.get_x() as usize + if self.reg.ppuctrl.nt_base_x {256} else {0})%size.0;
-        // let y_min = (self.reg.ppuscroll.get_y() as usize + if self.reg.ppuctrl.nt_base_y {240} else {0})%size.1;
-
+        let mut nt_img = image::RgbImage::new(size.0 as u32, size.1 as u32);
 
         for y in 0..size.1 {
             for x in 0..size.0 {
-
                 let (bg_val, bg_palette) = {
-
                     let chr_id = self.read_nametable(x, y);
                     // let chr_id = self.read_nametable(x, y); // TODO: scrolling/base address
                     // let palette_id = self.read_attribute_table(x, y);
@@ -1169,16 +1232,16 @@ impl Ppu {
                 let color_id = if bg_val == 0 {
                     self.pallette[0]
                 } else {
-                    self.pallette[4*bg_palette as usize + bg_val as usize]
+                    self.pallette[4 * bg_palette as usize + bg_val as usize]
                 };
-                let color = if x % 16 == 0|| y % 16 == 0 {//if x == x_min || y == y_min {
-                     (255,0,0)
+                let color = if x % 16 == 0 || y % 16 == 0 {
+                    //if x == x_min || y == y_min {
+                    (255, 0, 0)
                 // } else if x == x_min + 255 || y == y_min + 239 {
                 //     (200,200,0)
-                 } else {
+                } else {
                     SYSTEM_PALETTE[(color_id & 0x3f) as usize]
-                 }
-                ;
+                };
                 nt_img.put_pixel(x as u32, y as u32, image::Rgb([color.0, color.1, color.2]));
             }
         }
@@ -1188,17 +1251,17 @@ impl Ppu {
     }
 
     pub fn print_nametable(&self) {
-        for r in 0..(240/8) {
-            for c in 0..(256/8) {
-                print!("{:2x},",self.nametable1[r*(256/8) + c]);
+        for r in 0..(240 / 8) {
+            for c in 0..(256 / 8) {
+                print!("{:2x},", self.nametable1[r * (256 / 8) + c]);
             }
             println!();
         }
-            println!();
-            println!();
-        for r in 0..(240/8) {
-            for c in 0..(256/8) {
-                print!("{:2x},",self.nametable2[r*(256/8) + c]);
+        println!();
+        println!();
+        for r in 0..(240 / 8) {
+            for c in 0..(256 / 8) {
+                print!("{:2x},", self.nametable2[r * (256 / 8) + c]);
             }
             println!();
         }
@@ -1207,7 +1270,7 @@ impl Ppu {
         println!("Attr");
         for r in 0..8 {
             for c in 0..8 {
-                print!("{:x},",self.nametable1[960 + r*8 + c]);
+                print!("{:x},", self.nametable1[960 + r * 8 + c]);
             }
             println!();
         }
@@ -1216,7 +1279,7 @@ impl Ppu {
         println!("Palettes");
         for r in 0..8 {
             for c in 0..4 {
-                print!("{:x},",self.pallette[r*4 + c]);
+                print!("{:x},", self.pallette[r * 4 + c]);
             }
             println!();
         }
@@ -1224,8 +1287,11 @@ impl Ppu {
         println!();
         println!("Sprites");
         for s in 0..64 {
-            let s_data = &self.oam[s*4..(s+1)*4];
-            println!("{}: ({},{}), t: {:2x}, attr: {:2x}",s, s_data[3], s_data[0], s_data[1], s_data[2]);
+            let s_data = &self.oam[s * 4..(s + 1) * 4];
+            println!(
+                "{}: ({},{}), t: {:2x}, attr: {:2x}",
+                s, s_data[3], s_data[0], s_data[1], s_data[2]
+            );
         }
     }
 
