@@ -1,24 +1,22 @@
 mod nes;
 use std::time::{Instant, Duration, self};
 
-use iced::{self, keyboard, subscription};
+use iced::{self, keyboard};//, subscription};
 
-use eframe::egui::{self, CollapsingHeader};
-use eframe::epaint::ColorImage;
-use egui_extras::{self, RetainedImage};
 use image::{DynamicImage, EncodableLayout};
 
 use crate::nes::Nes;
 
-use iced::{executor, Subscription};
-use iced::{Application, Command, Element, Settings, Theme};
-use iced::widget;
+use iced::{Subscription, Element, widget};
 
-pub fn main() { // -> iced::Result {
+pub fn main() -> iced::Result {
     // let mut nes = Nes::new();
     // nes.load_rom(String::from("donkey_kong.nes"));
     // nes.ppu.borrow().render_chr();
-    Hello::run(Settings::default());
+    iced::application("RustyNES", update, view)
+    .subscription(subscription)
+    .run()
+    // IcedApp::run(Settings::default());
     // let native_options = eframe::NativeOptions::default();
     // eframe::run_native("My egui App",
     //     native_options,
@@ -29,63 +27,7 @@ pub fn main() { // -> iced::Result {
 
 }
 
-
-struct MyEguiApp {
-    nes: Nes,
-
-    chr_data: Option<RetainedImage>,
-}
-
-impl MyEguiApp {
-    fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        // Customize egui here with cc.egui_ctx.set_fonts and cc.egui_ctx.set_visuals.
-        // Restore app state using cc.storage (requires the "persistence" feature).
-        // Use the cc.gl (a glow::Context) to create graphics shaders and buffers that you can use
-        // for e.g. egui::PaintCallback.
-        let mut app = Self::default();
-
-        app.nes.load_rom(String::from("donkey_kong.nes"));
-        app
-    }
-}
-
-impl Default for MyEguiApp {
-    fn default() -> Self {
-        let mut nes = Nes::default();
-        //nes.load_rom(String::from("donkey_kong.nes"));
-        // let chr_image = nes.ppu.borrow().render_chr();
-        // let chr_image = DynamicImage::ImageLuma8(chr_image).into_rgba8();
-        // let chr_data = egui::ColorImage::from_rgba_unmultiplied(
-        //     [chr_image.width() as _, chr_image.height() as _],
-        //     chr_image.as_flat_samples().as_slice()
-        // );
-        // let chr_data = RetainedImage::from_color_image("chr_data", chr_data);
-        Self { nes, chr_data: None}
-
-    }
-}
-
-impl eframe::App for MyEguiApp {
-   fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-       egui::CentralPanel::default().show(ctx, |ui| {
-           ui.heading("Hello World!");
-           ui.label("Game field");
-           ui.collapsing("Debug Info", |ui| {
-            ui.label("CHR Data");
-            let chr_image = self.nes.ppu.borrow().render_chr();
-            let chr_image = DynamicImage::ImageLuma8(chr_image).into_rgba8();
-            let chr_data = egui::ColorImage::from_rgba_unmultiplied(
-                [chr_image.width() as _, chr_image.height() as _],
-                chr_image.as_flat_samples().as_slice()
-            );
-            self.chr_data = Some(RetainedImage::from_color_image("chr_data", chr_data));
-            self.chr_data.as_mut().unwrap().show(ui);
-           });
-       });
-   }
-}
-
-struct Hello {
+struct IcedApp {
     nes: Nes,
 
     // state
@@ -102,94 +44,97 @@ struct Hello {
 pub enum AppMessage {
     RefreshChrPressed,
     Tick(Instant),
-    Event(iced::Event)
+    KeyPress(iced::keyboard::Key),
+    KeyReleased(iced::keyboard::Key),
+    // Event(iced::Event)
 }
 
-impl Application for Hello {
-    type Executor = executor::Default;
-    type Flags = ();
-    type Message = AppMessage;
-    type Theme = Theme;
+impl Default for IcedApp {
+    fn default() -> Self {
+        IcedApp::new(())
+    }
+}
 
-    fn new(_flags: ()) -> (Hello, Command<Self::Message>) {
+impl IcedApp {
+    // type Executor = executor::Default;
+    // type Flags = ();
+    // type Message = AppMessage;
+    // type Theme = Theme;
+
+    fn new(_flags: ()) -> IcedApp {
         let mut nes = Nes::default();
         //nes.load_rom(String::from("donkey_kong.nes"));
         //  nes.load_rom(String::from("super_mario_brothers.nes"));
-         nes.load_rom(String::from("zelda.nes"));
+        _ = nes.load_rom(String::from("super_mario_brothers.nes"));
         // nes.load_rom(String::from("nes-test-roms/full_palette/full_palette.nes"));
         // nes.load_rom(String::from("nes-test-roms/ppu_vbl_nmi/rom_singles/01-vbl_basics.nes"));
-        (Hello {
+        IcedApp {
             nes,
             chr_image: None,
             nt_image: None,
             frame_rate: 60.0,
             frame: image::RgbaImage::new(256,240),
             controller_state: IcedControllerState::default()
-        }, Command::none())
+        }
     }
+}
 
-    fn title(&self) -> String {
-        String::from("A cool application")
-    }
 
-    fn subscription(&self) -> Subscription<Self::Message> {
+    fn subscription(state: &IcedApp) -> Subscription<AppMessage> {
         if true {//self.is_playing {
             Subscription::batch([
-            iced::time::every(Duration::from_millis(1000 / self.frame_rate as u64))
-                .map(Self::Message::Tick),
-            subscription::events().map(Self::Message::Event)])
+                iced::time::every(Duration::from_millis(1000 / state.frame_rate as u64))
+                    .map(AppMessage::Tick),
+                keyboard::on_key_press(|key, _modifiers| Some(AppMessage::KeyPress(key))),
+                keyboard::on_key_release(|key, _modifiers| Some(AppMessage::KeyReleased(key))),
+                // subscription::events().map(AppMessage::Event)
+            ])
             //iced::event::listen().map(Self.Message::Event)
         } else {
             Subscription::none()
         }
     }
 
-    fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
+    fn update(state: &mut IcedApp, message: AppMessage) {
         match message {
-            Self::Message::RefreshChrPressed => {
-                let chr_image = self.nes.ppu.borrow().render_chr();
-                self.chr_image = Some(DynamicImage::ImageLuma8(chr_image).into_rgba8());
-                let nt_image = self.nes.ppu.borrow().render_nt();
-                self.nt_image = Some(DynamicImage::ImageRgb8(nt_image).into_rgba8());
-                self.nes.ppu.borrow().print_nametable();
+            AppMessage::RefreshChrPressed => {
+                let chr_image = state.nes.ppu.borrow().render_chr();
+                state.chr_image = Some(DynamicImage::ImageLuma8(chr_image).into_rgba8());
+                let nt_image = state.nes.ppu.borrow().render_nt();
+                state.nt_image = Some(DynamicImage::ImageRgb8(nt_image).into_rgba8());
+                state.nes.ppu.borrow().print_nametable();
             },
-            Self::Message::Tick(instant) => {
+            AppMessage::Tick(_instant) => {
                 println!("Frame update");
                 let t = time::SystemTime::now();
-                self.nes.inputs.borrow_mut().set_controller1_state(self.controller_state.state);
-                self.frame = DynamicImage::ImageRgb8(self.nes.run_frame()).into_rgba8();
+                state.nes.inputs.borrow_mut().set_controller1_state(state.controller_state.state);
+                state.frame = DynamicImage::ImageRgb8(state.nes.run_frame()).into_rgba8();
                 let d = t.elapsed();
                 println!("Took {}s",d.unwrap().as_millis());
             }
-            Self::Message::Event(event) => {
-                match event {
-                    iced::Event::Keyboard(key_event) => {
-                        self.controller_state.onEvent(key_event);
-                    },
-                    _ => {}
-                }
-            }
+            AppMessage::KeyPress(key) => state.controller_state.on_event(key, true),
+            AppMessage::KeyReleased(key) => state.controller_state.on_event(key, false),
         }
-
-        Command::none()
     }
 
-    fn view(&self) -> Element<Self::Message> {
+    fn view(state: &IcedApp) -> Element<AppMessage> {
         // "Hello, world!".into();
         // let chr_image = self.nes.ppu.borrow().render_chr();
         // let chr_image = DynamicImage::ImageLuma8(chr_image).into_rgba8().as_bytes().to_owned();
-        let nt_image = if let Some(image) = self.nt_image.clone() {
-            widget::image::Handle::from_pixels(image.width(),image.height(),image.as_bytes().to_owned())
+        let nt_image = if let Some(image) = state.nt_image.clone() {
+            widget::image::Handle::from_rgba(image.width(),image.height(),image.as_bytes().to_owned())
         } else {
-            widget::image::Handle::from_pixels(200, 200, [0u8;200*200*4])
+            let data = vec![0u8; 200*200*4];
+            widget::image::Handle::from_rgba(200, 200, data)
         };
-        let chr_image = if let Some(image) = self.chr_image.clone() {
-            widget::image::Handle::from_pixels(image.width(),image.height(),image.as_bytes().to_owned())
+        let chr_image = if let Some(image) = state.chr_image.clone() {
+            widget::image::Handle::from_rgba(image.width(),image.height(),image.as_bytes().to_owned())
         } else {
-            widget::image::Handle::from_pixels(200, 200, [0u8;200*200*4])
+            let data = vec![0u8; 200*200*4];
+            widget::image::Handle::from_rgba(200, 200, data)
         };
-        let frame = self.frame.clone();
-        let frame = widget::image::Handle::from_pixels(frame.width(),frame.height(),frame.as_bytes().to_owned());
+        let frame = state.frame.clone();
+        let frame = widget::image::Handle::from_rgba(frame.width(),frame.height(),frame.as_bytes().to_owned());
         // widget::image::Handle::from_pixels(144,171,Some(chr_image);
         let content = iced::widget::column![
             widget::text(String::from("NES Screen")).size(30).width(iced::Length::Fill),
@@ -206,16 +151,16 @@ impl Application for Hello {
                 .max_scale(2.0)
                 .min_scale(2.0)
                 .width(iced::Length::Fill),    
-            widget::button("Refresh").on_press(Self::Message::RefreshChrPressed)
+            widget::button("Refresh").on_press(AppMessage::RefreshChrPressed)
         ];
         iced::widget::container(content)
             .width(iced::Length::Fill)
             .height(iced::Length::Fill)
-            .center_x()
-            .center_y()
+            .center_x(iced::Length::Fill)
+            .center_y(iced::Length::Fill)
             .into()
     }
-}
+
 
 
 #[derive(Default)]
@@ -224,28 +169,30 @@ struct IcedControllerState {
 }
 
 impl IcedControllerState {
-    fn onEvent(&mut self, event: iced::keyboard::Event) {
-                println!("Got event!");
-        if let Some((key_code, active)) = match event {
-            keyboard::Event::KeyPressed{key_code, modifiers: _} => Some((key_code, true)),
-            keyboard::Event::KeyReleased { key_code, modifiers: _ } => Some((key_code, false)),
-            _ => None
-        } {
-            print!("Got key {:?}",key_code);
-            match key_code {
-                keyboard::KeyCode::Up => self.state.up = active,
-                keyboard::KeyCode::Down => self.state.down = active,
-                keyboard::KeyCode::Left => self.state.left = active,
-                keyboard::KeyCode::Right => self.state.right = active,
-                keyboard::KeyCode::Enter => self.state.start = active,
-                keyboard::KeyCode::RShift => self.state.select = active,
-                keyboard::KeyCode::X => self.state.a = active,
-                keyboard::KeyCode::Z => self.state.b = active,
+    fn on_event(&mut self, key: iced::keyboard::Key, active: bool) {
+            println!("Got key {:?} {active}",key);
+            use keyboard::Key;
+            use keyboard::key::Named;
+            
+            match key {
+                Key::Named(name) => match name {
+                    Named::ArrowUp => self.state.up = active,
+                    Named::ArrowDown => self.state.down = active,
+                    Named::ArrowLeft => self.state.left = active,
+                    Named::ArrowRight => self.state.right = active,
+                    Named::Enter => self.state.start = active,
+                    Named::Shift => self.state.select = active,
+                    _ => ()
+                }
+                Key::Character(c) => match c.as_str() {
+                    "x" => self.state.a = active,
+                    "z" => self.state.b = active,
+                    _ => ()
+                }
                 _ => {}
             }
         }
     }
-}
 
 // fn main() {
 //     println!("Welcome to Tom's NES Emulator");
