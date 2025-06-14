@@ -1,17 +1,16 @@
-pub mod cpu; // temporarily public
-mod memory;
 mod cartridge;
+pub mod cpu; // temporarily public
+pub mod input;
+mod memory;
 mod memory_utils;
 mod ppu;
-pub mod input;
 
 use std::{cell::RefCell, rc::Rc};
 
 use cpu::Cpu;
-use ppu::Ppu;
+use input::InputBus;
 use memory::MemoryMap;
-
-use self::{cartridge::Cartridge, input::InputBus};
+use ppu::Ppu;
 
 pub struct Nes {
     pub cpu: Rc<RefCell<Cpu>>,
@@ -28,20 +27,21 @@ impl Nes {
         let cpu = Rc::new(RefCell::new(Cpu::new(mem.clone())));
         let inputs = Rc::new(RefCell::new(InputBus::new()));
 
-        mem.borrow_mut().set_refs(ppu.clone(), cpu.clone(), inputs.clone());
+        mem.borrow_mut()
+            .set_refs(ppu.clone(), cpu.clone(), inputs.clone());
 
         Nes {
             ppu,
             cpu,
             mem,
-            inputs
+            inputs,
         }
-
     }
 
+    #[allow(unused)]
     pub fn step(&mut self) -> Option<image::RgbaImage> {
         let (cpu_cycles, _) = self.cpu.borrow_mut().run_instruction();
-        self.ppu.borrow_mut().advance_cycles(cpu_cycles*3);
+        self.ppu.borrow_mut().advance_cycles(cpu_cycles * 3);
         None
     }
 
@@ -49,7 +49,7 @@ impl Nes {
         let mut frame_complete = false;
         while !frame_complete {
             let (cpu_cycles, _) = self.cpu.borrow_mut().run_instruction();
-            frame_complete = self.ppu.borrow_mut().advance_cycles(cpu_cycles*3);
+            frame_complete = self.ppu.borrow_mut().advance_cycles(cpu_cycles * 3);
         }
         self.ppu.borrow().get_frame()
     }
@@ -65,5 +65,7 @@ impl Nes {
 }
 
 impl Default for Nes {
-    fn default() -> Self { Nes::new() }
+    fn default() -> Self {
+        Nes::new()
+    }
 }

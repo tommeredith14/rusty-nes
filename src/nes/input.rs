@@ -1,8 +1,3 @@
-use std::default;
-
-
-
-
 pub trait InputDevice {
     fn write(&mut self, val: u8);
 
@@ -21,28 +16,27 @@ pub struct ControllerState {
     pub start: bool,
     pub select: bool,
     pub a: bool,
-    pub b: bool
+    pub b: bool,
 }
 
 #[derive(Default)]
 pub struct Controller {
     button_state: ControllerState,
     shift_register: u8,
-    should_poll: bool
+    should_poll: bool,
 }
 
 impl Controller {
-
     fn poll(&mut self) {
         let mut val = 0;
-        val |= if self.button_state.a {0x01} else {0};
-        val |= if self.button_state.b {0x02} else {0};
-        val |= if self.button_state.select {0x04} else {0};
-        val |= if self.button_state.start {0x08} else {0};
-        val |= if self.button_state.up {0x10} else {0};
-        val |= if self.button_state.down {0x20} else {0};
-        val |= if self.button_state.left {0x40} else {0};
-        val |= if self.button_state.right {0x80} else {0};
+        val |= if self.button_state.a { 0x01 } else { 0 };
+        val |= if self.button_state.b { 0x02 } else { 0 };
+        val |= if self.button_state.select { 0x04 } else { 0 };
+        val |= if self.button_state.start { 0x08 } else { 0 };
+        val |= if self.button_state.up { 0x10 } else { 0 };
+        val |= if self.button_state.down { 0x20 } else { 0 };
+        val |= if self.button_state.left { 0x40 } else { 0 };
+        val |= if self.button_state.right { 0x80 } else { 0 };
         self.shift_register = val;
     }
 }
@@ -59,7 +53,7 @@ impl InputDevice for Controller {
         if self.should_poll {
             self.poll();
         }
-        let ret  = self.shift_register & 0x01;
+        let ret = self.shift_register & 0x01;
         self.shift_register >>= 1;
         self.shift_register |= 0x80; // Official controllers read 1 after emptying
         ret
@@ -76,13 +70,11 @@ pub struct InputBus {
     controller2: Option<Box<dyn InputDevice>>,
 }
 
-
-
 impl InputBus {
     pub fn new() -> Self {
         Self {
             controller1: Some(Box::<Controller>::default()),
-            controller2: None
+            controller2: None,
         }
     }
 
@@ -98,14 +90,14 @@ impl InputBus {
     pub fn read_4016(&mut self) -> u8 {
         match &mut self.controller1 {
             Some(c) => c.read(),
-            None => 0
+            None => 0,
         }
     }
 
     pub fn read_4017(&mut self) -> u8 {
         match &mut self.controller2 {
             Some(c) => c.read(),
-            None => 0
+            None => 0,
         }
     }
 

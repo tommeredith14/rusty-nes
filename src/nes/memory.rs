@@ -1,6 +1,15 @@
-use std::{cell::RefCell, rc::{Weak, Rc}};
+use std::{
+    cell::RefCell,
+    rc::{Rc, Weak},
+};
 
-use super::{cartridge::{self, Cartridge}, cpu::Cpu, input::InputBus, memory_utils::read_word_from_buffer, ppu::Ppu};
+use super::{
+    cartridge::{self, Cartridge},
+    cpu::Cpu,
+    input::InputBus,
+    memory_utils::read_word_from_buffer,
+    ppu::Ppu,
+};
 
 const RAM_SIZE: usize = 0x0800;
 const PPU_REG_SIZE: usize = 0x0008;
@@ -37,17 +46,15 @@ pub struct MemoryMap {
     // Todo: reorganize
     ppu: Weak<RefCell<Ppu>>,
     cpu: Weak<RefCell<Cpu>>,
-    io: Weak<RefCell<InputBus>>
+    io: Weak<RefCell<InputBus>>,
 }
-
-
 
 enum Address {
     Ram(usize),
     Ppu(usize),
     Apu(usize),
     ApuTest(usize),
-    Cartridge
+    Cartridge,
 }
 
 impl MemoryMap {
@@ -61,21 +68,34 @@ impl MemoryMap {
 
             ppu: Weak::new(),
             cpu: Weak::new(),
-            io: Weak::new()
+            io: Weak::new(),
         }
     }
 
     fn map_address(&self, address: u16) -> Address {
-        match address as usize { // TODO: Return enum so io addrs can be sent to module
+        match address as usize {
+            // TODO: Return enum so io addrs can be sent to module
             RAM_START_ADDR..=RAM_END_ADDR => Address::Ram(address as usize - (RAM_START_ADDR)),
-            RAM_MIR1_START_ADDR..=RAM_MIR1_END_ADDR => Address::Ram(address as usize - (RAM_MIR1_START_ADDR)),
-            RAM_MIR2_START_ADDR..=RAM_MIR2_END_ADDR => Address::Ram(address as usize - (RAM_MIR1_START_ADDR)),
-            RAM_MIR3_START_ADDR..=RAM_MIR3_END_ADDR => Address::Ram(address as usize - (RAM_MIR1_START_ADDR)),
-            PPU_REG_START_ADDR..=PPU_MIR_END_ADDR => Address::Ppu(address as usize % (PPU_REG_SIZE)),
-            APU_REG_START_ADDR..=APU_REG_END_ADDR => Address::Apu(address as usize - (APU_REG_START_ADDR)),
-            APU_TEST_START_ADDR..=APU_TEST_END_ADDR => Address::ApuTest(address as usize - (APU_TEST_START_ADDR)),
+            RAM_MIR1_START_ADDR..=RAM_MIR1_END_ADDR => {
+                Address::Ram(address as usize - (RAM_MIR1_START_ADDR))
+            }
+            RAM_MIR2_START_ADDR..=RAM_MIR2_END_ADDR => {
+                Address::Ram(address as usize - (RAM_MIR1_START_ADDR))
+            }
+            RAM_MIR3_START_ADDR..=RAM_MIR3_END_ADDR => {
+                Address::Ram(address as usize - (RAM_MIR1_START_ADDR))
+            }
+            PPU_REG_START_ADDR..=PPU_MIR_END_ADDR => {
+                Address::Ppu(address as usize % (PPU_REG_SIZE))
+            }
+            APU_REG_START_ADDR..=APU_REG_END_ADDR => {
+                Address::Apu(address as usize - (APU_REG_START_ADDR))
+            }
+            APU_TEST_START_ADDR..=APU_TEST_END_ADDR => {
+                Address::ApuTest(address as usize - (APU_TEST_START_ADDR))
+            }
             CARTRIDGE_SPACE_START_ADDR..=CARTRIDGE_SPACE_END_ADDR => Address::Cartridge,
-            _ => panic!("Invalid memory read")
+            _ => panic!("Invalid memory read"),
         }
     }
 
@@ -83,16 +103,17 @@ impl MemoryMap {
         let parsed_addr: Address = self.map_address(address);
         match parsed_addr {
             Address::Ram(offset) => self.ram[offset],
-            Address::Ppu(offset) => self.ppu.upgrade().unwrap().borrow_mut().read_reg(offset as u16), // TODO: why does this compile??
+            Address::Ppu(offset) => self
+                .ppu
+                .upgrade()
+                .unwrap()
+                .borrow_mut()
+                .read_reg(offset as u16), // TODO: why does this compile??
             Address::Apu(offset) => {
                 match offset {
-                    0x16 => {
-                        self.io.upgrade().unwrap().borrow_mut().read_4016()
-                    },
-                    0x17 => {
-                        self.io.upgrade().unwrap().borrow_mut().read_4017()
-                    }
-                    _ => 0 // Open bus
+                    0x16 => self.io.upgrade().unwrap().borrow_mut().read_4016(),
+                    0x17 => self.io.upgrade().unwrap().borrow_mut().read_4017(),
+                    _ => 0, // Open bus
                 }
             }
             Address::ApuTest(offset) => self.apu_test_reg[offset],
@@ -110,11 +131,11 @@ impl MemoryMap {
                 match offset {
                     0x16 => {
                         todo!("Read word from input");
-                    },
+                    }
                     0x17 => {
                         todo!("Read word from input+1")
                     }
-                    _ => 0 // Open bus
+                    _ => 0, // Open bus
                 }
             }
             Address::ApuTest(offset) => read_word_from_buffer(&self.apu_test_reg, offset),
@@ -126,7 +147,12 @@ impl MemoryMap {
         let parsed_addr: Address = self.map_address(address);
         match parsed_addr {
             Address::Ram(offset) => self.ram[offset] = val,
-            Address::Ppu(offset) => self.ppu.upgrade().unwrap().borrow_mut().write_reg(offset as u16, val),
+            Address::Ppu(offset) => self
+                .ppu
+                .upgrade()
+                .unwrap()
+                .borrow_mut()
+                .write_reg(offset as u16, val),
             Address::Apu(offset) => {
                 match offset {
                     0x14 => {
@@ -137,34 +163,48 @@ impl MemoryMap {
                             data[i as usize] = self.read_byte(start_addr + i);
                         }
                         self.ppu.upgrade().unwrap().borrow_mut().oam_dma(data);
-                    },
+                    }
                     0x16 => {
                         self.io.upgrade().unwrap().borrow_mut().write(val);
                     }
-                    _ => self.apu_reg[offset] = val
+                    _ => self.apu_reg[offset] = val,
                 }
-            },
+            }
             Address::ApuTest(offset) => self.apu_test_reg[offset] = val,
-            Address::Cartridge => self.cartridge.as_mut().unwrap().borrow_mut().write_byte(address, val),
+            Address::Cartridge => self
+                .cartridge
+                .as_mut()
+                .unwrap()
+                .borrow_mut()
+                .write_byte(address, val),
         };
 
         // hidden cycles
         match address {
             0x4014 => 513, // TODO or 514??
-            _ => 0
+            _ => 0,
         }
     }
 
     // todo move this
     pub fn load_rom(&mut self, path: String) -> Result<(), String> {
         let loaded_cartridge = Rc::new(RefCell::new(cartridge::load_rom(path)?));
-        self.ppu.upgrade().unwrap().borrow_mut().set_cartridge(loaded_cartridge.clone());
+        self.ppu
+            .upgrade()
+            .unwrap()
+            .borrow_mut()
+            .set_cartridge(loaded_cartridge.clone());
         self.cartridge = Some(loaded_cartridge);
         Ok(())
     }
 
     // todo: reorganize
-    pub fn set_refs(&mut self, ppu: Rc<RefCell<Ppu>>, cpu: Rc<RefCell<Cpu>>, inputs: Rc<RefCell<InputBus>>) {
+    pub fn set_refs(
+        &mut self,
+        ppu: Rc<RefCell<Ppu>>,
+        cpu: Rc<RefCell<Cpu>>,
+        inputs: Rc<RefCell<InputBus>>,
+    ) {
         self.ppu = Rc::downgrade(&ppu);
         self.cpu = Rc::downgrade(&cpu);
         self.io = Rc::downgrade(&inputs)
@@ -177,5 +217,4 @@ impl MemoryMap {
     pub fn nmi_requested(&self) -> bool {
         self.ppu.upgrade().unwrap().borrow().nmi_requested()
     }
-
 }

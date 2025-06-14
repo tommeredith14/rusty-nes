@@ -1,4 +1,3 @@
-
 pub fn read_word_from_buffer(buf: &[u8], offset: usize) -> u16 {
     (buf[offset] as u16) | ((buf[offset + 1] as u16) << 8)
 }
