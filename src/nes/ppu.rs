@@ -2,8 +2,8 @@ use std::{cell::RefCell, os::unix::raw::off_t, rc::Rc};
 
 use super::{cartridge::Cartridge, cartridge::Mirroring, memory::MemoryMap};
 
-use eframe::glow::MAX_FRAGMENT_ATOMIC_COUNTERS;
-use iced::alignment::Horizontal;
+// use eframe::glow::MAX_FRAGMENT_ATOMIC_COUNTERS;
+// use iced::alignment::Horizontal;
 use image::{self, RgbImage};
 // use show_image;
 

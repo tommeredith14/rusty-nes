@@ -1,4 +1,3 @@
-
 use std::{cell::RefCell, rc::Rc};
 
 use self::cpu_helpers::push_stack;
@@ -54,13 +53,14 @@ mod cpu_helpers {
     }
 }
 
+#[allow(clippy::let_and_return)]
 mod control_instructions {
     use std::cell::RefMut;
 
-    use super::super::{memory::MemoryMap, cpu::cpu_helpers::pop_stack};
+    use super::super::{cpu::cpu_helpers::pop_stack, memory::MemoryMap};
 
     use super::cpu_helpers::page_cross;
-    use super::{CpuRegisters, Status, Operand, cpu_helpers::push_stack};
+    use super::{CpuRegisters, Operand, Status, cpu_helpers::push_stack};
 
     pub(super) fn run_bit(reg: &mut CpuRegisters, mem: RefMut<MemoryMap>, operand: Operand) -> u32 {
         let Operand::Address(addr) = operand else {
@@ -82,9 +82,11 @@ mod control_instructions {
         let cycles = if !reg.p.contains(Status::CARRY) {
             reg.pc = addr;
             // print!("  to 0x{:x}", reg.pc);
-            if page_cross(orig_pc, reg.pc) {2} else {1}
-        } else {0};
-        
+            if page_cross(orig_pc, reg.pc) { 2 } else { 1 }
+        } else {
+            0
+        };
+
         cycles
     }
     pub(super) fn run_bcs(reg: &mut CpuRegisters, operand: Operand) -> u32 {
@@ -96,8 +98,10 @@ mod control_instructions {
         let cycles = if reg.p.contains(Status::CARRY) {
             reg.pc = addr;
             // print!("  to 0x{:x}", reg.pc);
-            if page_cross(orig_pc, reg.pc) {2} else {1}
-        } else {0};
+            if page_cross(orig_pc, reg.pc) { 2 } else { 1 }
+        } else {
+            0
+        };
 
         cycles
     }
@@ -109,8 +113,10 @@ mod control_instructions {
         let cycles = if reg.p.contains(Status::ZERO) {
             reg.pc = addr;
             // print!("  to 0x{:x}", reg.pc);
-            if page_cross(orig_pc, reg.pc) {2} else {1}
-        } else {0};
+            if page_cross(orig_pc, reg.pc) { 2 } else { 1 }
+        } else {
+            0
+        };
 
         cycles
     }
@@ -122,8 +128,10 @@ mod control_instructions {
         let cycles = if reg.p.contains(Status::NEGATIVE) {
             reg.pc = addr;
             // print!("  to 0x{:x}", reg.pc);
-            if page_cross(orig_pc, reg.pc) {2} else {1}
-        } else {0};
+            if page_cross(orig_pc, reg.pc) { 2 } else { 1 }
+        } else {
+            0
+        };
 
         cycles
     }
@@ -135,8 +143,10 @@ mod control_instructions {
         let cycles = if !reg.p.contains(Status::ZERO) {
             reg.pc = addr;
             // print!("  to 0x{:x}", reg.pc);
-            if page_cross(orig_pc, reg.pc) {2} else {1}
-        } else {0};
+            if page_cross(orig_pc, reg.pc) { 2 } else { 1 }
+        } else {
+            0
+        };
 
         cycles
     }
@@ -148,41 +158,26 @@ mod control_instructions {
         let cycles = if !reg.p.contains(Status::NEGATIVE) {
             reg.pc = addr;
             // print!("  to 0x{:x}", reg.pc);
-            if page_cross(orig_pc, reg.pc) {2} else {1}
-        } else {0};
+            if page_cross(orig_pc, reg.pc) { 2 } else { 1 }
+        } else {
+            0
+        };
 
         cycles
     }
-    pub(super) fn run_brk(reg: &mut CpuRegisters, mut mem: RefMut<MemoryMap>, operand: Operand) -> u32 {
-        assert_eq!(operand, Operand::None);
 
-        // Push PC + 2 to stack
-        let return_addr = reg.pc +2-1; // Should point to the next instruction
-        push_stack(reg, &mut mem, ((return_addr & 0xFF00) >> 8) as u8);
-        push_stack(reg, &mut mem, (return_addr & 0x00FF) as u8);
-        
-
-        // println!("Status: {:x}", reg.p.bits());
-
-        push_stack(reg, &mut mem, (reg.p | Status::BREAK | Status::IGNORED).bits);
-
-        // Initiate interrupt
-
-        let irq_addr = mem.read_word(0xfffe);
-        reg.p.set(Status::IT_DISABLE, true);
-        reg.pc = irq_addr;
-
-        6
-    }
     pub(super) fn run_rti(reg: &mut CpuRegisters, mem: RefMut<MemoryMap>, operand: Operand) -> u32 {
         assert_eq!(operand, Operand::None);
 
         // Pop flags fom register
         let flags = Status::from_bits(pop_stack(reg, &mem)).unwrap();
-        reg.p.set(Status::NEGATIVE, flags.contains(Status::NEGATIVE));
-        reg.p.set(Status::OVERFLOW, flags.contains(Status::OVERFLOW));
+        reg.p
+            .set(Status::NEGATIVE, flags.contains(Status::NEGATIVE));
+        reg.p
+            .set(Status::OVERFLOW, flags.contains(Status::OVERFLOW));
         reg.p.set(Status::DECIMAL, flags.contains(Status::DECIMAL));
-        reg.p.set(Status::IT_DISABLE, flags.contains(Status::IT_DISABLE));
+        reg.p
+            .set(Status::IT_DISABLE, flags.contains(Status::IT_DISABLE));
         reg.p.set(Status::ZERO, flags.contains(Status::ZERO));
         reg.p.set(Status::CARRY, flags.contains(Status::CARRY));
         reg.p.set(Status::IGNORED, true); // TODO: needed?
@@ -195,7 +190,6 @@ mod control_instructions {
         reg.pc = pc;
 
         5
-
     }
     pub(super) fn run_bvc(reg: &mut CpuRegisters, operand: Operand) -> u32 {
         let Operand::Address(addr) = operand else {
@@ -206,8 +200,10 @@ mod control_instructions {
         let cycles = if !reg.p.contains(Status::OVERFLOW) {
             reg.pc = addr;
             // print!("  to 0x{:x}", reg.pc);
-            if page_cross(orig_pc, reg.pc) {2} else {1}
-        } else {0};
+            if page_cross(orig_pc, reg.pc) { 2 } else { 1 }
+        } else {
+            0
+        };
 
         cycles
     }
@@ -220,8 +216,10 @@ mod control_instructions {
         let cycles = if reg.p.contains(Status::OVERFLOW) {
             reg.pc = addr;
             // print!("  to 0x{:x}", reg.pc);
-            if page_cross(orig_pc, reg.pc) {2} else {1}
-        } else {0};
+            if page_cross(orig_pc, reg.pc) { 2 } else { 1 }
+        } else {
+            0
+        };
 
         cycles
     }
@@ -253,7 +251,7 @@ mod control_instructions {
         let (val, cycles) = match operand {
             Operand::Address(addr) => (mem.read_byte(addr), 1),
             Operand::Value(val) => (val, 0),
-            Operand::None => panic!("CPX requires an operand") 
+            Operand::None => panic!("CPX requires an operand"),
         };
         let result = reg.x.wrapping_sub(val);
 
@@ -263,12 +261,12 @@ mod control_instructions {
         reg.p.set(Status::CARRY, val <= reg.x);
 
         cycles
-    }    
+    }
     pub(super) fn run_cpy(reg: &mut CpuRegisters, mem: RefMut<MemoryMap>, operand: Operand) -> u32 {
         let (val, cycles) = match operand {
             Operand::Address(addr) => (mem.read_byte(addr), 1),
             Operand::Value(val) => (val, 0),
-            Operand::None => panic!("CPY requires an operand") 
+            Operand::None => panic!("CPY requires an operand"),
         };
         let result = reg.y.wrapping_sub(val);
 
@@ -278,12 +276,12 @@ mod control_instructions {
         reg.p.set(Status::CARRY, val <= reg.y);
 
         cycles
-    }    
+    }
     pub(super) fn run_dey(reg: &mut CpuRegisters, operand: Operand) -> u32 {
         assert_eq!(operand, Operand::None);
         let val = match reg.y {
             1..=0xFF => reg.y - 1,
-            0 => 0xFF
+            0 => 0xFF,
         };
         // print!(" DEY {:x} -> {:x}", reg.y, val);
         reg.y = val;
@@ -297,7 +295,7 @@ mod control_instructions {
         assert_eq!(operand, Operand::None);
         let val = match reg.x {
             0..=0xFE => reg.x + 1,
-            0xFF => 0
+            0xFF => 0,
         };
         reg.x = val;
         // flags:
@@ -310,7 +308,7 @@ mod control_instructions {
         assert_eq!(operand, Operand::None);
         let val = match reg.y {
             0..=0xFE => reg.y + 1,
-            0xFF => 0
+            0xFF => 0,
         };
         reg.y = val;
         // flags:
@@ -329,7 +327,11 @@ mod control_instructions {
 
         0
     }
-    pub(super) fn run_jsr(reg: &mut CpuRegisters, mut mem: RefMut<MemoryMap>, operand: Operand) -> u32 {
+    pub(super) fn run_jsr(
+        reg: &mut CpuRegisters,
+        mut mem: RefMut<MemoryMap>,
+        operand: Operand,
+    ) -> u32 {
         let Operand::Address(addr) = operand else {
             panic!("JSR only takes addresses");
         };
@@ -350,7 +352,7 @@ mod control_instructions {
         let (val, cycles) = match operand {
             Operand::Address(addr) => (mem.read_byte(addr), 1),
             Operand::Value(val) => (val, 0),
-            Operand::None => panic!("LDY requires an operand") 
+            Operand::None => panic!("LDY requires an operand"),
         };
         reg.y = val;
 
@@ -359,15 +361,27 @@ mod control_instructions {
         reg.p.set(Status::NEGATIVE, val & 0x80 != 0);
         cycles
     }
-    pub(super) fn run_pha(reg: &mut CpuRegisters, mut mem: RefMut<MemoryMap>, operand: Operand) -> u32 {
+    pub(super) fn run_pha(
+        reg: &mut CpuRegisters,
+        mut mem: RefMut<MemoryMap>,
+        operand: Operand,
+    ) -> u32 {
         assert_eq!(operand, Operand::None);
         push_stack(reg, &mut mem, reg.a);
         // No flags
         2
     }
-    pub(super) fn run_php(reg: &mut CpuRegisters, mut mem: RefMut<MemoryMap>, operand: Operand) -> u32 {
+    pub(super) fn run_php(
+        reg: &mut CpuRegisters,
+        mut mem: RefMut<MemoryMap>,
+        operand: Operand,
+    ) -> u32 {
         assert_eq!(operand, Operand::None);
-        push_stack(reg, &mut mem, reg.p.bits | Status::BREAK.bits | Status::IGNORED.bits);
+        push_stack(
+            reg,
+            &mut mem,
+            reg.p.bits | Status::BREAK.bits | Status::IGNORED.bits,
+        );
         // No flags
         2
     }
@@ -390,8 +404,8 @@ mod control_instructions {
     }
     pub(super) fn run_rts(reg: &mut CpuRegisters, mem: RefMut<MemoryMap>, operand: Operand) -> u32 {
         assert_eq!(operand, Operand::None);
-        let bl = pop_stack(reg, &mem) as u16;//mem.read_byte(reg.s.into()) as u16;
-        let bh = pop_stack(reg, &mem) as u16;// mem.read_byte(reg.s.into()) as u16;
+        let bl = pop_stack(reg, &mem) as u16; //mem.read_byte(reg.s.into()) as u16;
+        let bh = pop_stack(reg, &mem) as u16; // mem.read_byte(reg.s.into()) as u16;
 
         let return_addr = (bh << 8) | bl;
         // print!("  {:x} & {:x} -> {:x}", bh, bl, return_addr);
@@ -418,7 +432,11 @@ mod control_instructions {
         // No flags
         0
     }
-    pub(super) fn run_sty(reg: &mut CpuRegisters, mut mem: RefMut<MemoryMap>, operand: Operand) -> u32 {
+    pub(super) fn run_sty(
+        reg: &mut CpuRegisters,
+        mut mem: RefMut<MemoryMap>,
+        operand: Operand,
+    ) -> u32 {
         let Operand::Address(addr) = operand else {
             panic!("STY only takes addresses");
         };
@@ -431,7 +449,7 @@ mod control_instructions {
         reg.p.set(Status::ZERO, reg.y == 0);
         reg.p.set(Status::NEGATIVE, reg.y & 0x80 != 0);
 
-        0   
+        0
     }
     pub(super) fn run_tya(reg: &mut CpuRegisters, operand: Operand) -> u32 {
         assert_eq!(operand, Operand::None);
@@ -439,24 +457,25 @@ mod control_instructions {
         // print!("  TYA: A -> {:x}", reg.a);
         // flags:
         reg.p.set(Status::ZERO, reg.a == 0);
-        reg.p.set(Status::NEGATIVE, reg.a & 0x80 != 0);   
+        reg.p.set(Status::NEGATIVE, reg.a & 0x80 != 0);
 
-        0     
+        0
     }
 }
 
+#[allow(clippy::let_and_return)]
 mod alu_instructions {
     use std::cell::RefMut;
 
     use super::super::memory::MemoryMap;
 
-    use super::{Operand, CpuRegisters, Status};
+    use super::{CpuRegisters, Operand, Status};
 
     pub(super) fn run_cmp(reg: &mut CpuRegisters, mem: RefMut<MemoryMap>, operand: Operand) -> u32 {
         let (val, cycles) = match operand {
             Operand::Address(addr) => (mem.read_byte(addr), 1),
             Operand::Value(val) => (val, 0),
-            Operand::None => panic!("CMP requires an operand") 
+            Operand::None => panic!("CMP requires an operand"),
         };
         let result = reg.a.wrapping_sub(val);
 
@@ -466,8 +485,12 @@ mod alu_instructions {
         reg.p.set(Status::CARRY, val <= reg.a);
 
         cycles
-    }    
-    pub(super) fn run_sta(reg: &mut CpuRegisters, mut mem: RefMut<MemoryMap>, operand: Operand) -> u32 {
+    }
+    pub(super) fn run_sta(
+        reg: &mut CpuRegisters,
+        mut mem: RefMut<MemoryMap>,
+        operand: Operand,
+    ) -> u32 {
         let Operand::Address(addr) = operand else {
             panic!("STA only takes addresses");
         };
@@ -479,7 +502,7 @@ mod alu_instructions {
         let (val, cycles) = match operand {
             Operand::Address(addr) => (mem.read_byte(addr), 1),
             Operand::Value(val) => (val, 0),
-            Operand::None => panic!("LDA requires an operand") 
+            Operand::None => panic!("LDA requires an operand"),
         };
         // println!("  loaded {}", val);
         reg.a = val;
@@ -494,7 +517,7 @@ mod alu_instructions {
         let (val, cycles) = match operand {
             Operand::Address(addr) => (mem.read_byte(addr), 1),
             Operand::Value(val) => (val, 0),
-            Operand::None => panic!("ORA requires an operand") 
+            Operand::None => panic!("ORA requires an operand"),
         };
         reg.a |= val;
 
@@ -509,7 +532,7 @@ mod alu_instructions {
         let (val, cycles) = match operand {
             Operand::Address(addr) => (mem.read_byte(addr), 1),
             Operand::Value(val) => (val, 0),
-            Operand::None => panic!("EOR requires an operand") 
+            Operand::None => panic!("EOR requires an operand"),
         };
         reg.a ^= val;
 
@@ -519,12 +542,12 @@ mod alu_instructions {
 
         // print!("   EOR result {:x}", reg.a);
         cycles
-    }    
+    }
     pub(super) fn run_and(reg: &mut CpuRegisters, mem: RefMut<MemoryMap>, operand: Operand) -> u32 {
         let (val, cycles) = match operand {
             Operand::Address(addr) => (mem.read_byte(addr), 1),
             Operand::Value(val) => (val, 0),
-            Operand::None => panic!("AND requires an operand") 
+            Operand::None => panic!("AND requires an operand"),
         };
         // print!("  {:b} & {:b} = ", reg.a, val);
         reg.a &= val;
@@ -536,12 +559,12 @@ mod alu_instructions {
 
         // print!("   AND result {:x}", reg.a);
         cycles
-    }    
+    }
     pub(super) fn run_adc(reg: &mut CpuRegisters, mem: RefMut<MemoryMap>, operand: Operand) -> u32 {
         let (val, cycles) = match operand {
             Operand::Address(addr) => (mem.read_byte(addr), 1),
             Operand::Value(val) => (val, 0),
-            Operand::None => panic!("SBC requires an operand") 
+            Operand::None => panic!("SBC requires an operand"),
         };
         // print!(" {} + {}, {}", reg.a, val, reg.p.contains(Status::CARRY));
         let mut result = reg.a as u16 + val as u16;
@@ -550,7 +573,7 @@ mod alu_instructions {
         }
 
         let truncated_result = (result & 0x00FF) as u8;
-        let overflow: bool = (!(reg.a ^ val))&(reg.a ^ truncated_result)&0x80 != 0;
+        let overflow: bool = (!(reg.a ^ val)) & (reg.a ^ truncated_result) & 0x80 != 0;
         reg.a = truncated_result;
 
         // flags: https://www.pagetable.com/c64ref/6502/?tab=2#SBC
@@ -561,12 +584,12 @@ mod alu_instructions {
         // print!("= {} -> {}, {:b}", result, truncated_result, reg.p.bits)
 
         cycles
-    }    
+    }
     pub(super) fn run_sbc(reg: &mut CpuRegisters, mem: RefMut<MemoryMap>, operand: Operand) -> u32 {
         let (val, cycles) = match operand {
             Operand::Address(addr) => (mem.read_byte(addr), 1),
             Operand::Value(val) => (val, 0),
-            Operand::None => panic!("SBC requires an operand") 
+            Operand::None => panic!("SBC requires an operand"),
         };
 
         cycles + run_adc(reg, mem, Operand::Value(!val))
@@ -586,26 +609,32 @@ mod alu_instructions {
         // reg.p.set(Status::CARRY, result >= 0);
         // reg.p.set(Status::OVERFLOW, result > i8::MAX as i16 || result < i8::MIN as i16);
         // print!("= {} -> {}, {:b}", result, truncated_result, reg.p.bits)
-    }    
+    }
 }
 
 mod rmw_instructions {
     use std::cell::RefMut;
 
     use super::super::memory::MemoryMap;
-    use super::{Operand, CpuRegisters, Status};
-    pub(super) fn run_asl(reg: &mut CpuRegisters, mut mem: RefMut<MemoryMap>, operand: Operand) -> u32 {
-        let (val,cycles) = match operand {
+    use super::{CpuRegisters, Operand, Status};
+    pub(super) fn run_asl(
+        reg: &mut CpuRegisters,
+        mut mem: RefMut<MemoryMap>,
+        operand: Operand,
+    ) -> u32 {
+        let (val, cycles) = match operand {
             Operand::Address(addr) => (mem.read_byte(addr), 3),
             Operand::Value(_) => panic!("ASL Operates on A or memory"),
-            Operand::None => (reg.a, 1)
+            Operand::None => (reg.a, 1),
         };
         let carry = (val & 0x80) != 0;
         let result = val << 1;
         match operand {
-            Operand::Address(addr) => {mem.write_byte(addr,result);},
+            Operand::Address(addr) => {
+                mem.write_byte(addr, result);
+            }
             Operand::Value(_) => panic!("ASL Operates on A or memory"),
-            Operand::None => reg.a = result
+            Operand::None => reg.a = result,
         };
 
         // flags: https://www.pagetable.com/c64ref/6502/?tab=2#LSR
@@ -615,18 +644,24 @@ mod rmw_instructions {
 
         cycles
     }
-    pub(super) fn run_rol(reg: &mut CpuRegisters, mut mem: RefMut<MemoryMap>, operand: Operand) -> u32 {
+    pub(super) fn run_rol(
+        reg: &mut CpuRegisters,
+        mut mem: RefMut<MemoryMap>,
+        operand: Operand,
+    ) -> u32 {
         let (val, cycles) = match operand {
             Operand::Address(addr) => (mem.read_byte(addr), 3),
             Operand::Value(_) => panic!("ROL Operates on A or memory"),
-            Operand::None => (reg.a, 1)
+            Operand::None => (reg.a, 1),
         };
         let carry = (val & 0x80) != 0;
         let result = val << 1 | reg.p.contains(Status::CARRY) as u8;
         match operand {
-            Operand::Address(addr) => {mem.write_byte(addr,result);},
+            Operand::Address(addr) => {
+                mem.write_byte(addr, result);
+            }
             Operand::Value(_) => panic!("ROL Operates on A or memory"),
-            Operand::None => reg.a = result
+            Operand::None => reg.a = result,
         };
 
         // flags: https://www.pagetable.com/c64ref/6502/?tab=2#LSR
@@ -636,18 +671,29 @@ mod rmw_instructions {
 
         cycles
     }
-    pub(super) fn run_ror(reg: &mut CpuRegisters, mut mem: RefMut<MemoryMap>, operand: Operand) -> u32 {
+    pub(super) fn run_ror(
+        reg: &mut CpuRegisters,
+        mut mem: RefMut<MemoryMap>,
+        operand: Operand,
+    ) -> u32 {
         let (val, cycles) = match operand {
-            Operand::Address(addr) => (mem.read_byte(addr),3),
+            Operand::Address(addr) => (mem.read_byte(addr), 3),
             Operand::Value(_) => panic!("ROR Operates on A or memory"),
-            Operand::None => (reg.a,1)
+            Operand::None => (reg.a, 1),
         };
         let carry = (val & 0x01) == 1;
-        let result = val >> 1 | if reg.p.contains(Status::CARRY) {0x80} else {0x0};
+        let result = val >> 1
+            | if reg.p.contains(Status::CARRY) {
+                0x80
+            } else {
+                0x0
+            };
         match operand {
-            Operand::Address(addr) => {mem.write_byte(addr,result);},
+            Operand::Address(addr) => {
+                mem.write_byte(addr, result);
+            }
             Operand::Value(_) => panic!("ROR Operates on A or memory"),
-            Operand::None => reg.a = result
+            Operand::None => reg.a = result,
         };
 
         // flags: https://www.pagetable.com/c64ref/6502/?tab=2#LSR
@@ -657,7 +703,11 @@ mod rmw_instructions {
 
         cycles
     }
-    pub(super) fn run_dec(reg: &mut CpuRegisters, mut mem: RefMut<MemoryMap>, operand: Operand) -> u32 {
+    pub(super) fn run_dec(
+        reg: &mut CpuRegisters,
+        mut mem: RefMut<MemoryMap>,
+        operand: Operand,
+    ) -> u32 {
         let addr = match operand {
             Operand::Address(addr) => addr,
             _ => panic!("Dec Operates on memory"),
@@ -665,9 +715,9 @@ mod rmw_instructions {
         let val = mem.read_byte(addr);
         let val = match val {
             1..=0xFF => val - 1,
-            0 => 0xFF
+            0 => 0xFF,
         };
-        let hidden_cycles = mem.write_byte(addr,val);
+        let hidden_cycles = mem.write_byte(addr, val);
         // flags:
         reg.p.set(Status::ZERO, val == 0);
         reg.p.set(Status::NEGATIVE, val & 0x80 != 0);
@@ -678,7 +728,7 @@ mod rmw_instructions {
         assert_eq!(operand, Operand::None);
         let val = match reg.x {
             1..=0xFF => reg.x - 1,
-            0 => 0xFF
+            0 => 0xFF,
         };
         // print!(" DEX {:x} -> {:x}", reg.x, val);
         reg.x = val;
@@ -688,14 +738,18 @@ mod rmw_instructions {
 
         0
     }
-    pub(super) fn run_inc(reg: &mut CpuRegisters, mut mem: RefMut<MemoryMap>, operand: Operand) -> u32 {
+    pub(super) fn run_inc(
+        reg: &mut CpuRegisters,
+        mut mem: RefMut<MemoryMap>,
+        operand: Operand,
+    ) -> u32 {
         let Operand::Address(addr) = operand else {
             panic!("INC only takes addresses");
         };
         let val = mem.read_byte(addr);
         let val = match val {
             0..=0xFE => val + 1,
-            0xFF => 0
+            0xFF => 0,
         };
         let hidden_cycles = mem.write_byte(addr, val);
         // flags:
@@ -708,7 +762,7 @@ mod rmw_instructions {
         let (val, cycles) = match operand {
             Operand::Address(addr) => (mem.read_byte(addr), 1),
             Operand::Value(val) => (val, 0),
-            Operand::None => panic!("LDx requires an operand") 
+            Operand::None => panic!("LDx requires an operand"),
         };
         reg.x = val;
 
@@ -718,7 +772,11 @@ mod rmw_instructions {
 
         cycles
     }
-    pub(super) fn run_lsr(reg: &mut CpuRegisters, mut mem: RefMut<MemoryMap>, operand: Operand) -> u32 {
+    pub(super) fn run_lsr(
+        reg: &mut CpuRegisters,
+        mut mem: RefMut<MemoryMap>,
+        operand: Operand,
+    ) -> u32 {
         let (z, c, cycles) = match operand {
             Operand::Address(addr) => {
                 let val = mem.read_byte(addr);
@@ -726,9 +784,9 @@ mod rmw_instructions {
                 let val = val >> 1;
                 let hidden_cycles = mem.write_byte(addr, val);
                 (val == 0, carry, 3 + hidden_cycles)
-            },
+            }
             Operand::Value(_) => panic!("LSR Operates on A or memory"),
-            Operand::None =>  {
+            Operand::None => {
                 let carry = (reg.a & 0x01) == 1;
                 reg.a >>= 1;
                 (reg.a == 0, carry, 1)
@@ -742,7 +800,11 @@ mod rmw_instructions {
 
         cycles
     }
-    pub(super) fn run_stx(reg: &mut CpuRegisters, mut mem: RefMut<MemoryMap>, operand: Operand) -> u32 {
+    pub(super) fn run_stx(
+        reg: &mut CpuRegisters,
+        mut mem: RefMut<MemoryMap>,
+        operand: Operand,
+    ) -> u32 {
         let Operand::Address(addr) = operand else {
             panic!("STX only takes addresses");
         };
@@ -753,9 +815,9 @@ mod rmw_instructions {
         reg.x = reg.a;
         // flags:
         reg.p.set(Status::ZERO, reg.x == 0);
-        reg.p.set(Status::NEGATIVE, reg.x & 0x80 != 0);     
+        reg.p.set(Status::NEGATIVE, reg.x & 0x80 != 0);
 
-        0   
+        0
     }
     pub(super) fn run_tsx(reg: &mut CpuRegisters, operand: Operand) -> u32 {
         assert_eq!(operand, Operand::None);
@@ -764,7 +826,7 @@ mod rmw_instructions {
         reg.p.set(Status::ZERO, reg.x == 0);
         reg.p.set(Status::NEGATIVE, reg.x & 0x80 != 0);
 
-        0    
+        0
     }
     pub(super) fn run_txa(reg: &mut CpuRegisters, operand: Operand) -> u32 {
         assert_eq!(operand, Operand::None);
@@ -772,9 +834,9 @@ mod rmw_instructions {
         // print!("  TXA: A -> {:x}", reg.a);
         // flags:
         reg.p.set(Status::ZERO, reg.a == 0);
-        reg.p.set(Status::NEGATIVE, reg.a & 0x80 != 0);  
+        reg.p.set(Status::NEGATIVE, reg.a & 0x80 != 0);
 
-        0      
+        0
     }
     pub(super) fn run_txs(reg: &mut CpuRegisters, operand: Operand) -> u32 {
         assert_eq!(operand, Operand::None);
@@ -783,12 +845,11 @@ mod rmw_instructions {
 
         0
     }
-
 }
 
 struct LoopDetection {
     last_pc: u16,
-    repeats: usize
+    repeats: usize,
 }
 
 pub struct Cpu {
@@ -798,20 +859,20 @@ pub struct Cpu {
     loop_detection: LoopDetection,
 
     // TODO: move?
-    last_nmi_level: bool
+    last_nmi_level: bool,
 }
 enum PageCrossCycle {
     NA,
     NoPageCross,
-    PageCross
+    PageCross,
 }
 
+#[allow(unused)]
 enum InteruptSource {
-    IRQ,
-    BRK,
-    NMI
+    Irq,
+    Brk,
+    Nmi,
 }
-
 
 impl Cpu {
     pub fn new(mem: Rc<RefCell<MemoryMap>>) -> Self {
@@ -821,13 +882,18 @@ impl Cpu {
                 x: 0,
                 y: 0,
                 pc: 0,
-                p: Status { bits: Status::IGNORED.bits },
+                p: Status {
+                    bits: Status::IGNORED.bits,
+                },
                 s: 0xff,
             },
             // cycle_count: 0,
             memory: mem,
-            loop_detection: LoopDetection { last_pc: 0, repeats: 0 },
-            last_nmi_level: false
+            loop_detection: LoopDetection {
+                last_pc: 0,
+                repeats: 0,
+            },
+            last_nmi_level: false,
         }
     }
 
@@ -845,40 +911,42 @@ impl Cpu {
     }
 
     fn read_byte(&mut self, addr: u16) -> u8 {
-        let ret = self.memory.borrow().read_byte(addr);
-        ret
+        self.memory.borrow().read_byte(addr)
     }
-
-    fn read_word(&mut self, addr: u16) -> u16 {
-        let ret = self.memory.borrow().read_word(addr);
-        ret
-    }
-
 
     fn enter_interrupt(&mut self, source: InteruptSource) -> u32 {
         // Push PC + 2 to stack
-        let return_addr = match source { 
-            InteruptSource::BRK => self.registers.pc +2-1, // Should point to the next instruction
-            _ => self.registers.pc
+        let return_addr = match source {
+            InteruptSource::Brk => self.registers.pc + 2 - 1, // Should point to the next instruction
+            _ => self.registers.pc,
         };
-        push_stack(&mut self.registers, &mut self.memory.borrow_mut(), ((return_addr & 0xFF00) >> 8) as u8);
-        push_stack(&mut self.registers, &mut self.memory.borrow_mut(), (return_addr & 0x00FF) as u8);
-        
+        push_stack(
+            &mut self.registers,
+            &mut self.memory.borrow_mut(),
+            ((return_addr & 0xFF00) >> 8) as u8,
+        );
+        push_stack(
+            &mut self.registers,
+            &mut self.memory.borrow_mut(),
+            (return_addr & 0x00FF) as u8,
+        );
 
         // println!("Status: {:x}", reg.p.bits());
-        let p = self.registers.p | Status::IGNORED | match source {
-            InteruptSource::BRK => Status::BREAK,
-            _ => Status::empty()
-        };
+        let p = self.registers.p
+            | Status::IGNORED
+            | match source {
+                InteruptSource::Brk => Status::BREAK,
+                _ => Status::empty(),
+            };
         push_stack(&mut self.registers, &mut self.memory.borrow_mut(), p.bits);
 
         // Initiate interrupt
 
         let irq_addr = match source {
-            InteruptSource::NMI => self.memory.borrow().read_word(0xfffa),
-            _ => self.memory.borrow().read_word(0xfffe)
+            InteruptSource::Nmi => self.memory.borrow().read_word(0xfffa),
+            _ => self.memory.borrow().read_word(0xfffe),
         };
-        
+
         self.registers.p.set(Status::IT_DISABLE, true);
         self.registers.pc = irq_addr;
 
@@ -891,7 +959,7 @@ impl Cpu {
         self.last_nmi_level = nmi_level;
         if nmi_level && nmi_level != last_nmi_level {
             //println!("NMI!");
-            return (1 + self.enter_interrupt(InteruptSource::NMI) as u64, false);
+            return (1 + self.enter_interrupt(InteruptSource::Nmi) as u64, false);
         }
 
         let instruction = self.read_byte_pc();
@@ -923,13 +991,11 @@ impl Cpu {
         (cycles as u64, loop_detected)
     }
 
-
-
-    fn parse_operand(&mut self, mode: AddressMode) -> (Operand,u8,PageCrossCycle) {
+    fn parse_operand(&mut self, mode: AddressMode) -> (Operand, u8, PageCrossCycle) {
         match mode {
-            AddressMode::Implied => (Operand::None,0,PageCrossCycle::NA),
-            AddressMode::Acc => (Operand::None,0,PageCrossCycle::NA),
-            AddressMode::Abs => (Operand::Address(self.read_word_pc()),2,PageCrossCycle::NA),
+            AddressMode::Implied => (Operand::None, 0, PageCrossCycle::NA),
+            AddressMode::Acc => (Operand::None, 0, PageCrossCycle::NA),
+            AddressMode::Abs => (Operand::Address(self.read_word_pc()), 2, PageCrossCycle::NA),
             AddressMode::AbsX => {
                 let base = self.read_word_pc();
                 let addr = base + self.registers.x as u16;
@@ -938,8 +1004,8 @@ impl Cpu {
                 } else {
                     PageCrossCycle::NoPageCross
                 };
-                (Operand::Address(addr),2,page_cross)
-            },
+                (Operand::Address(addr), 2, page_cross)
+            }
             AddressMode::AbsY => {
                 let base = self.read_word_pc();
                 let addr = base + self.registers.y as u16;
@@ -948,37 +1014,39 @@ impl Cpu {
                 } else {
                     PageCrossCycle::NoPageCross
                 };
-                (Operand::Address(addr),2,page_cross)
-            },
-            AddressMode::Imm => (Operand::Value(self.read_byte_pc()),1,PageCrossCycle::NA),
+                (Operand::Address(addr), 2, page_cross)
+            }
+            AddressMode::Imm => (Operand::Value(self.read_byte_pc()), 1, PageCrossCycle::NA),
             AddressMode::Ind => {
                 let addr_location = self.read_word_pc();
                 // Indir wraps on page boundaries!
                 let lo_byte = self.read_byte(addr_location);
-                let hi_byte_loc = (addr_location & 0xFF00) | (((addr_location & 0xFF) as u8).wrapping_add(1) as u16);
+                let hi_byte_loc = (addr_location & 0xFF00)
+                    | (((addr_location & 0xFF) as u8).wrapping_add(1) as u16);
                 let hi_byte = self.read_byte(hi_byte_loc);
 
                 let addr = ((hi_byte as u16) << 8) | (lo_byte as u16);
-                (Operand::Address(addr),4,PageCrossCycle::NA)
-            },
+                (Operand::Address(addr), 4, PageCrossCycle::NA)
+            }
             AddressMode::IndX => {
                 let ll_addr = self.read_byte_pc();
                 let addr_location = ll_addr.wrapping_add(self.registers.x);
-                let addr = (self.read_byte(addr_location as u16) as u16) |
-                    ((self.read_byte(addr_location.wrapping_add(1) as u16) as u16) << 8);
-                (Operand::Address(addr),4,PageCrossCycle::NA)
-            },
+                let addr = (self.read_byte(addr_location as u16) as u16)
+                    | ((self.read_byte(addr_location.wrapping_add(1) as u16) as u16) << 8);
+                (Operand::Address(addr), 4, PageCrossCycle::NA)
+            }
             AddressMode::IndY => {
                 let ll_addr = self.read_byte_pc();
-                let addr = self.read_byte(ll_addr as u16) as u16 | ((self.read_byte(ll_addr.wrapping_add(1) as u16) as u16) << 8);
+                let addr = self.read_byte(ll_addr as u16) as u16
+                    | ((self.read_byte(ll_addr.wrapping_add(1) as u16) as u16) << 8);
                 let res = addr.wrapping_add(self.registers.y as u16);
                 let page_cross = if (addr & 0xFF00) != (res & 0xFF00) {
                     PageCrossCycle::PageCross
                 } else {
                     PageCrossCycle::NoPageCross
                 };
-                (Operand::Address(res),3,page_cross)
-            }, // TODO: carry
+                (Operand::Address(res), 3, page_cross)
+            } // TODO: carry
             AddressMode::Rel => {
                 // let orig_pc = self.registers.pc - 1;
                 // let opu8 = self.read_byte_pc();
@@ -987,11 +1055,23 @@ impl Cpu {
                 // println!("{:x} + {:x}({}) = {:x}",orig_pc, opu8, opi8, res);
                 let opi8 = self.read_byte_pc() as i8;
                 let res = self.registers.pc.wrapping_add((opi8) as u16); // My guess: acts on incremented pc
-                (Operand::Address(res),1,PageCrossCycle::NA)
-            },
-            AddressMode::Zpg => (Operand::Address(self.read_byte_pc() as u16),1,PageCrossCycle::NA), // addr 00BB
-            AddressMode::ZpgX => (Operand::Address(self.read_byte_pc().wrapping_add(self.registers.x) as u16),2,PageCrossCycle::NA),
-            AddressMode::ZpgY => (Operand::Address(self.read_byte_pc().wrapping_add(self.registers.y) as u16),2,PageCrossCycle::NA),
+                (Operand::Address(res), 1, PageCrossCycle::NA)
+            }
+            AddressMode::Zpg => (
+                Operand::Address(self.read_byte_pc() as u16),
+                1,
+                PageCrossCycle::NA,
+            ), // addr 00BB
+            AddressMode::ZpgX => (
+                Operand::Address(self.read_byte_pc().wrapping_add(self.registers.x) as u16),
+                2,
+                PageCrossCycle::NA,
+            ),
+            AddressMode::ZpgY => (
+                Operand::Address(self.read_byte_pc().wrapping_add(self.registers.y) as u16),
+                2,
+                PageCrossCycle::NA,
+            ),
         }
     }
 
@@ -1002,39 +1082,69 @@ impl Cpu {
             ControlInstruction::Bcc => run_bcc(&mut self.registers, operand),
             ControlInstruction::Bcs => run_bcs(&mut self.registers, operand),
             ControlInstruction::Beq => run_beq(&mut self.registers, operand),
-            ControlInstruction::Bit => run_bit(&mut self.registers, self.memory.borrow_mut(), operand),
+            ControlInstruction::Bit => {
+                run_bit(&mut self.registers, self.memory.borrow_mut(), operand)
+            }
             ControlInstruction::Bmi => run_bmi(&mut self.registers, operand),
             ControlInstruction::Bne => run_bne(&mut self.registers, operand),
             ControlInstruction::Bpl => run_bpl(&mut self.registers, operand),
-            ControlInstruction::Brk => self.enter_interrupt(InteruptSource::BRK),//run_brk(&mut self.registers, self.memory.borrow_mut(), operand),
+            ControlInstruction::Brk => self.enter_interrupt(InteruptSource::Brk),
             ControlInstruction::Bvc => run_bvc(&mut self.registers, operand),
             ControlInstruction::Bvs => run_bvs(&mut self.registers, operand),
             ControlInstruction::Clc => run_clc(&mut self.registers, operand),
             ControlInstruction::Cld => run_cld(&mut self.registers, operand),
             ControlInstruction::Cli => run_cli(&mut self.registers, operand),
             ControlInstruction::Clv => run_clv(&mut self.registers, operand),
-            ControlInstruction::Cpx => run_cpx(&mut self.registers, self.memory.borrow_mut(), operand),
-            ControlInstruction::Cpy => run_cpy(&mut self.registers, self.memory.borrow_mut(), operand),
+            ControlInstruction::Cpx => {
+                run_cpx(&mut self.registers, self.memory.borrow_mut(), operand)
+            }
+            ControlInstruction::Cpy => {
+                run_cpy(&mut self.registers, self.memory.borrow_mut(), operand)
+            }
             ControlInstruction::Dey => run_dey(&mut self.registers, operand),
             ControlInstruction::Inx => run_inx(&mut self.registers, operand),
             ControlInstruction::Iny => run_iny(&mut self.registers, operand),
             ControlInstruction::Jmp => run_jmp(&mut self.registers, operand),
-            ControlInstruction::Jsr => run_jsr(&mut self.registers, self.memory.borrow_mut(), operand),
-            ControlInstruction::Ldy => run_ldy(&mut self.registers, self.memory.borrow_mut(), operand),
-            ControlInstruction::Pha => run_pha(&mut self.registers, self.memory.borrow_mut(), operand),
-            ControlInstruction::Php => run_php(&mut self.registers, self.memory.borrow_mut(), operand),
-            ControlInstruction::Pla => run_pla(&mut self.registers, self.memory.borrow_mut(), operand),
-            ControlInstruction::Plp => run_plp(&mut self.registers, self.memory.borrow_mut(), operand),
-            ControlInstruction::Rti => run_rti(&mut self.registers, self.memory.borrow_mut(), operand),
-            ControlInstruction::Rts => run_rts(&mut self.registers, self.memory.borrow_mut(), operand),
+            ControlInstruction::Jsr => {
+                run_jsr(&mut self.registers, self.memory.borrow_mut(), operand)
+            }
+            ControlInstruction::Ldy => {
+                run_ldy(&mut self.registers, self.memory.borrow_mut(), operand)
+            }
+            ControlInstruction::Pha => {
+                run_pha(&mut self.registers, self.memory.borrow_mut(), operand)
+            }
+            ControlInstruction::Php => {
+                run_php(&mut self.registers, self.memory.borrow_mut(), operand)
+            }
+            ControlInstruction::Pla => {
+                run_pla(&mut self.registers, self.memory.borrow_mut(), operand)
+            }
+            ControlInstruction::Plp => {
+                run_plp(&mut self.registers, self.memory.borrow_mut(), operand)
+            }
+            ControlInstruction::Rti => {
+                run_rti(&mut self.registers, self.memory.borrow_mut(), operand)
+            }
+            ControlInstruction::Rts => {
+                run_rts(&mut self.registers, self.memory.borrow_mut(), operand)
+            }
             ControlInstruction::Sec => run_sec(&mut self.registers, operand),
             ControlInstruction::Sed => run_sed(&mut self.registers, operand),
             ControlInstruction::Sei => run_sei(&mut self.registers, operand),
-            ControlInstruction::Sty => run_sty(&mut self.registers, self.memory.borrow_mut(), operand),
+            ControlInstruction::Sty => {
+                run_sty(&mut self.registers, self.memory.borrow_mut(), operand)
+            }
             ControlInstruction::Tay => run_tay(&mut self.registers, operand),
             ControlInstruction::Tya => run_tya(&mut self.registers, operand),
         };
-        op_cycles as u32 + inst_cycles + if matches!(pg_cross, PageCrossCycle::PageCross) {1} else {0}
+        op_cycles as u32
+            + inst_cycles
+            + if matches!(pg_cross, PageCrossCycle::PageCross) {
+                1
+            } else {
+                0
+            }
     }
 
     fn run_alu_instruction(&mut self, inst: AluInstruction, mode: AddressMode) -> u32 {
@@ -1053,9 +1163,15 @@ impl Cpu {
                     pg_cross = PageCrossCycle::PageCross;
                 }
                 run_sta(&mut self.registers, self.memory.borrow_mut(), operand)
-            },
+            }
         };
-        op_cycles as u32 + inst_cycles + if matches!(pg_cross, PageCrossCycle::PageCross) {1} else {0}
+        op_cycles as u32
+            + inst_cycles
+            + if matches!(pg_cross, PageCrossCycle::PageCross) {
+                1
+            } else {
+                0
+            }
     }
 
     fn run_rmw_instruction(&mut self, inst: RmwInstruction, mode: AddressMode) -> u32 {
@@ -1067,61 +1183,57 @@ impl Cpu {
                     pg_cross = PageCrossCycle::PageCross;
                 }
                 run_asl(&mut self.registers, self.memory.borrow_mut(), operand)
-            },
+            }
             RmwInstruction::Dec => {
                 if matches!(pg_cross, PageCrossCycle::NoPageCross) {
                     pg_cross = PageCrossCycle::PageCross;
                 }
                 run_dec(&mut self.registers, self.memory.borrow_mut(), operand)
-            },
+            }
             RmwInstruction::Dex => run_dex(&mut self.registers, operand),
             RmwInstruction::Inc => {
                 if matches!(pg_cross, PageCrossCycle::NoPageCross) {
                     pg_cross = PageCrossCycle::PageCross;
                 }
                 run_inc(&mut self.registers, self.memory.borrow_mut(), operand)
-            },
+            }
             RmwInstruction::Ldx => run_ldx(&mut self.registers, self.memory.borrow_mut(), operand),
             RmwInstruction::Lsr => {
                 if matches!(pg_cross, PageCrossCycle::NoPageCross) {
                     pg_cross = PageCrossCycle::PageCross;
                 }
                 run_lsr(&mut self.registers, self.memory.borrow_mut(), operand)
-            },
+            }
             RmwInstruction::Rol => {
                 if matches!(pg_cross, PageCrossCycle::NoPageCross) {
                     pg_cross = PageCrossCycle::PageCross;
                 }
                 run_rol(&mut self.registers, self.memory.borrow_mut(), operand)
-            },
+            }
             RmwInstruction::Ror => {
                 if matches!(pg_cross, PageCrossCycle::NoPageCross) {
                     pg_cross = PageCrossCycle::PageCross;
                 }
                 run_ror(&mut self.registers, self.memory.borrow_mut(), operand)
-            },
+            }
             RmwInstruction::Stx => run_stx(&mut self.registers, self.memory.borrow_mut(), operand),
             RmwInstruction::Tax => run_tax(&mut self.registers, operand),
             RmwInstruction::Tsx => run_tsx(&mut self.registers, operand),
             RmwInstruction::Txa => run_txa(&mut self.registers, operand),
             RmwInstruction::Txs => run_txs(&mut self.registers, operand),
         };
-        op_cycles as u32 + inst_cycles + if matches!(pg_cross, PageCrossCycle::PageCross) {1} else {0}
+        op_cycles as u32
+            + inst_cycles
+            + if matches!(pg_cross, PageCrossCycle::PageCross) {
+                1
+            } else {
+                0
+            }
     }
     fn run_nop_instruction(&mut self, mode: AddressMode) -> u32 {
         let (_, cycles, _) = self.parse_operand(mode);
         cycles as u32 + 1
     }
-
-    // fn instruction_type(instruction: u8) -> InstructionType {
-    //     match instruction & 0x03 {
-    //         0x00 => InstructionType::Control,
-    //         0x01 => InstructionType::Alu,
-    //         0x02 => InstructionType::Rmw,
-    //         0x03 => InstructionType::Unofficial,
-    //         _ => unreachable!()
-    //     }
-    // }
 
     // todo move this
     pub fn initialize(&mut self) {
@@ -1220,8 +1332,7 @@ enum AddressMode {
     ZpgY,
 }
 
-#[derive(PartialEq)]
-#[derive(Debug)]
+#[derive(PartialEq, Debug)]
 enum Operand {
     Address(u16),
     Value(u8),
@@ -1233,8 +1344,7 @@ enum InstructionType {
     Control(ControlInstruction, AddressMode),
     Alu(AluInstruction, AddressMode),
     Rmw(RmwInstruction, AddressMode),
-    Nop(AddressMode)
-    // Unofficial,
+    Nop(AddressMode), // Unofficial,
 }
 
 impl From<u8> for InstructionType {
@@ -1422,7 +1532,7 @@ impl From<u8> for InstructionType {
 mod tests {
     use super::super::cpu::Operand;
 
-    use super::{control_instructions::run_sei, CpuRegisters, Status};
+    use super::{CpuRegisters, Status, control_instructions::run_sei};
 
     #[test]
     fn test_sei() {
